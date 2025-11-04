@@ -35,6 +35,8 @@ nb-configuration.xml
 # Logs
 *.log
 logs/
+consumer-*.log
+producer.log
 
 # Temporary files
 *.tmp
