@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: consumer-app
+  cloud:
+    stream:
+      kafka:
+        binder:
+          brokers: localhost:9092
+          auto-create-topics: true
+          configuration:
+            # Enable detailed consumer logging
+            session.timeout.ms: 30000
+            heartbeat.interval.ms: 10000
+      bindings:
+        consumeMessage-in-0:
+          destination: test-topic
+          group: test-consumer-group
+          consumer:
+            # Enable concurrency for partition distribution
+            concurrency: 3
+            partitioned: true
+      function:
+        definition: consumeMessage
+
+server:
+  port: 8081
+
+# Logging configuration to see partition assignments
+logging:
+  level:
+    org.apache.kafka.clients.consumer: INFO
+    org.apache.kafka.clients.consumer.internals.ConsumerCoordinator: DEBUG
+    org.springframework.cloud.stream: DEBUG
+    com.example.kafka.consumer: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - [%thread] [%X{partition}] %-5level %logger{36} - %msg%n"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
