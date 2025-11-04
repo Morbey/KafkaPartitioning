@@ -42,7 +42,7 @@ cleanup() {
     exit 0
 }
 
-# Registar função de cleanup para Ctrl+C
+# Registrar função de cleanup para Ctrl+C
 trap cleanup SIGINT SIGTERM
 
 # Verificar se o diretório do consumer existe
