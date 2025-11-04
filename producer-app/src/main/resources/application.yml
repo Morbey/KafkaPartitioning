@@ -1,24 +1,48 @@
 spring:
   application:
     name: producer-app
-  cloud:
-    stream:
-      kafka:
-        binder:
-          brokers: localhost:9092
-          auto-create-topics: true
-          configuration:
-            # Producer configuration
-            acks: all
-            retries: 3
-      bindings:
-        produceMessage-out-0:
-          destination: test-topic
-          producer:
-            partition-count: 3
-            partition-key-expression: headers['partitionKey']
-      function:
-        definition: produceMessage
+  
+  # Database configuration
+  datasource:
+    url: jdbc:postgresql://localhost:5432/kafkadb
+    username: kafkauser
+    password: kafkapass
+    driver-class-name: org.postgresql.Driver
+  
+  # JPA/Hibernate configuration
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        use_sql_comments: true
+  
+  # Kafka Producer Configuration
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      # Producer reliability settings
+      acks: all
+      retries: 3
+      properties:
+        # Enable idempotence for exactly-once semantics
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+
+# Application-specific configuration
+app:
+  kafka:
+    topic: task-topic
+  outbox:
+    # Poll interval for checking new messages (milliseconds)
+    poll-interval-ms: 1000
+    # Batch size for processing outbox messages
+    batch-size: 100
 
 server:
   port: 8080
@@ -27,16 +51,27 @@ server:
 logging:
   level:
     org.apache.kafka.clients.producer: INFO
-    org.springframework.cloud.stream: DEBUG
+    org.springframework.kafka: DEBUG
     com.example.kafka.producer: INFO
+    org.hibernate.SQL: DEBUG
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} - [%thread] %-5level %logger{36} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
+# Actuator configuration for monitoring
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       show-details: always
+    prometheus:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: ${spring.application.name}
+
