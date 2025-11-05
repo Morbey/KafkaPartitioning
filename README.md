@@ -1,11 +1,12 @@
 # Kafka Partitions PoC - Modern Setup without Zookeeper
 
-Este projeto demonstra uma aplicação completa de Kafka usando Spring Kafka (sem Spring Cloud Stream), com persistência em PostgreSQL usando Hibernate 6, padrão Transactional Outbox, **agregação de snapshots por task**, e monitorização com Prometheus e Grafana.
+Este projeto demonstra uma aplicação completa de Kafka usando Spring Kafka (sem Spring Cloud Stream), com persistência em PostgreSQL/Oracle usando Hibernate 6, padrão Transactional Outbox, **agregação de snapshots por task**, e monitorização com Prometheus e Grafana.
 
 ## 🎯 Características Principais
 
 - ✅ **Kafka em modo KRaft** - Sem dependência de Zookeeper
 - ✅ **Persistência completa** - PostgreSQL com Hibernate 6
+- ✅ **Suporte Oracle** - Outbox em Oracle Database com polling JDBC ou Oracle AQ/JMS
 - ✅ **Padrão Outbox** - Produção transacional de mensagens
 - ✅ **Agregação por Task** - Snapshots completos em vez de mensagens por atributo
 - ✅ **Read-Model materializado** - Tabela `task_snapshots` para consulta eficiente
@@ -16,7 +17,8 @@ Este projeto demonstra uma aplicação completa de Kafka usando Spring Kafka (se
 - ✅ **Monitorização** - Prometheus + Grafana com métricas personalizadas
 - ✅ **Testes de integração** - Testcontainers com Kafka e PostgreSQL
 - ✅ **Distribuição por partições** - Mensagens distribuídas por key (cliente)
-- ✅ **Multi-ambiente** - Suporte para Docker local e ambientes empresariais externos
+- ✅ **Multi-ambiente** - Suporte para Docker local, PostgreSQL empresarial e Oracle Database
+- ✅ **Perfil padrão empresarial** - Configurado para usar serviços externos sem Docker
 
 ## 📋 Estrutura do Projeto
 
@@ -49,19 +51,43 @@ kafkaPartitionsPoc/
 
 ### Escolher o Perfil de Execução
 
-Este projeto suporta dois perfis:
+Este projeto suporta três perfis de execução:
 
-#### 1. **Perfil `docker`** (padrão) - Ambiente Local com Docker
-Usa Kafka e PostgreSQL levantados localmente via `docker-compose`.
-
-#### 2. **Perfil `local`** - Ambiente Empresarial (sem Docker)
+#### 1. **Perfil `local`** (padrão) - Ambiente Empresarial (sem Docker)
 Usa Kafka e PostgreSQL externos configurados via variáveis de ambiente.
+**Este é o perfil padrão** - ideal para ambientes empresariais profissionais.
+
+#### 2. **Perfil `docker`** - Ambiente Local com Docker
+Usa Kafka e PostgreSQL levantados localmente via `docker-compose`.
+Use este perfil apenas quando explicitamente solicitado para desenvolvimento local.
+
+#### 3. **Perfil `oracle`** - Ambiente com Oracle Database
+Usa Oracle Database para a tabela de outbox, com Kafka externo.
+Ideal para ambientes onde Oracle AQ/JMS já está em uso.
 
 ### 1. Iniciar Infraestrutura
 
-#### Opção A: Ambiente Local com Docker (perfil `docker`)
+#### Opção A: Ambiente Empresarial (perfil `local`) - PADRÃO
+
+Configurar as seguintes variáveis de ambiente apontando para os seus servidores:
 
 ```bash
+# Configuração do PostgreSQL
+export DATASOURCE_URL="jdbc:postgresql://seu-postgres-empresarial:5432/suadb"
+export DATASOURCE_USERNAME="seuusuario"
+export DATASOURCE_PASSWORD="suasenha"
+
+# Configuração do Kafka
+export KAFKA_BOOTSTRAP_SERVERS="seu-kafka-empresarial:9092"
+
+# O perfil 'local' é ativado automaticamente (padrão)
+# Para explicitamente definir: export SPRING_PROFILES_ACTIVE="local"
+```
+
+#### Opção B: Ambiente Local com Docker (perfil `docker`)
+
+```bash
+# Primeiro, iniciar o Docker Compose
 docker-compose up -d
 ```
 
@@ -78,22 +104,48 @@ docker exec -it kafka kafka-topics --bootstrap-server localhost:9092 \
   --config cleanup.policy=compact
 ```
 
-#### Opção B: Ambiente Empresarial (perfil `local`)
-
-Configurar as seguintes variáveis de ambiente apontando para os seus servidores:
-
+**Para usar este perfil, defina:**
 ```bash
-# Configuração do PostgreSQL
-export DATASOURCE_URL="jdbc:postgresql://seu-postgres-empresarial:5432/suadb"
-export DATASOURCE_USERNAME="seuusuario"
-export DATASOURCE_PASSWORD="suasenha"
+export SPRING_PROFILES_ACTIVE="docker"
+```
+
+#### Opção C: Ambiente com Oracle Database (perfil `oracle`)
+
+**1. Executar o script SQL de setup do Oracle:**
+```sql
+-- Execute o script em: producer-app/src/main/resources/oracle-outbox-setup.sql
+-- Este script cria:
+-- - Tabela OUTBOX_MESSAGES
+-- - Sequence OUTBOX_SEQ
+-- - Índices de performance
+-- - (Opcional) Oracle AQ queue para integração JMS
+```
+
+**2. Configurar variáveis de ambiente:**
+```bash
+# Configuração do Oracle Database
+export ORACLE_DATASOURCE_URL="jdbc:oracle:thin:@seu-oracle:1521:ORCL"
+export ORACLE_DATASOURCE_USERNAME="seuusuario"
+export ORACLE_DATASOURCE_PASSWORD="suasenha"
 
 # Configuração do Kafka
 export KAFKA_BOOTSTRAP_SERVERS="seu-kafka-empresarial:9092"
 
-# Activar o perfil 'local'
-export SPRING_PROFILES_ACTIVE="local"
+# (Opcional) Configuração do Oracle AQ
+export ORACLE_AQ_QUEUE_NAME="OUTBOX_QUEUE"
+export ORACLE_AQ_QUEUE_TABLE="OUTBOX_QUEUE_TABLE"
+export ORACLE_AQ_POLL_INTERVAL_MS="1000"
+
+# Ativar o perfil 'oracle'
+export SPRING_PROFILES_ACTIVE="oracle"
 ```
+
+**Notas sobre Oracle:**
+- O outbox Oracle usa polling JDBC por padrão (similar ao PostgreSQL)
+- Oracle AQ (Advanced Queuing) é opcional e pode ser configurado para integração JMS
+- A tabela de outbox usa CLOB para payloads grandes
+- Limpeza automática de mensagens antigas pode ser configurada (ver SQL script)
+
 
 ### 2. Build do Projeto
 
@@ -103,24 +155,36 @@ mvn clean install
 
 ### 3. Executar Producer
 
-#### Com perfil Docker (padrão):
+#### Com perfil Empresarial `local` (padrão):
 ```bash
 cd producer-app
+# Assumindo que as variáveis de ambiente já estão configuradas (ver seção 1)
 mvn spring-boot:run
-```
-
-#### Com perfil Empresarial (local):
-```bash
-cd producer-app
-mvn spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=local"
 ```
 
 **Ou** com variáveis de ambiente inline:
 ```bash
-SPRING_PROFILES_ACTIVE=local \
+cd producer-app
 DATASOURCE_URL="jdbc:postgresql://seu-postgres:5432/suadb" \
 DATASOURCE_USERNAME="seuusuario" \
 DATASOURCE_PASSWORD="suasenha" \
+KAFKA_BOOTSTRAP_SERVERS="seu-kafka:9092" \
+mvn spring-boot:run
+```
+
+#### Com perfil Docker:
+```bash
+cd producer-app
+mvn spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=docker"
+```
+
+#### Com perfil Oracle:
+```bash
+cd producer-app
+SPRING_PROFILES_ACTIVE=oracle \
+ORACLE_DATASOURCE_URL="jdbc:oracle:thin:@seu-oracle:1521:ORCL" \
+ORACLE_DATASOURCE_USERNAME="seuusuario" \
+ORACLE_DATASOURCE_PASSWORD="suasenha" \
 KAFKA_BOOTSTRAP_SERVERS="seu-kafka:9092" \
 mvn spring-boot:run
 ```
@@ -129,11 +193,12 @@ O producer estará disponível em http://localhost:8080
 
 ### 4. Executar Consumer(s)
 
-#### Com perfil Docker (padrão):
+#### Com perfil Empresarial `local` (padrão):
 
 **Terminal 1 (Consumer 1):**
 ```bash
 cd consumer-app
+# Assumindo que as variáveis de ambiente já estão configuradas
 mvn spring-boot:run
 ```
 
@@ -149,11 +214,24 @@ cd consumer-app
 mvn spring-boot:run -Dspring-boot.run.arguments="--server.port=8083"
 ```
 
-#### Com perfil Empresarial (local):
+#### Com perfil Docker:
+
+**Terminal 1 (Consumer 1):**
+```bash
+cd consumer-app
+mvn spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=docker"
+```
+
+**Terminal 2 (Consumer 2 - opcional):**
+```bash
+cd consumer-app
+mvn spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=docker --server.port=8082"
+```
+
+#### Com perfil Empresarial (variáveis inline):
 
 ```bash
 cd consumer-app
-SPRING_PROFILES_ACTIVE=local \
 DATASOURCE_URL="jdbc:postgresql://seu-postgres:5432/suadb" \
 DATASOURCE_USERNAME="seuusuario" \
 DATASOURCE_PASSWORD="suasenha" \
@@ -224,6 +302,106 @@ Quando uma task sofre muitas alterações (ex: atualização massiva de atributo
    - ✅ Menos mensagens no Kafka
    - ✅ Frontend consome estado completo
    - ⚠️ Debounce pode adicionar latência (200ms)
+
+## 🔌 Integração com Oracle Database
+
+O projeto suporta Oracle Database como alternativa ao PostgreSQL para a tabela de outbox, ideal para ambientes empresariais que já utilizam Oracle e/ou Oracle AQ (Advanced Queuing).
+
+### Abordagens de Integração
+
+#### 1. **Polling JDBC** (Implementação Atual - Recomendada)
+
+A abordagem mais simples e compatível com todos os ambientes Oracle:
+
+```
+[Aplicação]
+  ↓ insere transacionalmente em OUTBOX_MESSAGES (Oracle)
+  ↓
+[OracleOutboxPollingService] (scheduled 1s)
+  ↓ consulta: SELECT * FROM OUTBOX_MESSAGES WHERE PUBLISHED = 0
+  ↓ publica mensagens no Kafka
+  ↓ atualiza: UPDATE OUTBOX_MESSAGES SET PUBLISHED = 1
+```
+
+**Vantagens:**
+- ✅ Simples de implementar e manter
+- ✅ Não requer configuração adicional do Oracle
+- ✅ Funciona com qualquer versão do Oracle (12c+)
+- ✅ Transacional e confiável
+
+**Desvantagens:**
+- ⚠️ Latência de polling (configurável, padrão 1s)
+- ⚠️ Carga adicional no banco (queries periódicas)
+
+#### 2. **Oracle AQ/JMS** (Disponível - Opcional)
+
+Abordagem baseada em mensageria nativa do Oracle, usando Oracle Advanced Queuing:
+
+```
+[Aplicação]
+  ↓ insere transacionalmente em OUTBOX_MESSAGES (Oracle)
+  ↓ (trigger opcional) enfileira mensagem em AQ
+  ↓
+[Oracle AQ Queue: OUTBOX_QUEUE]
+  ↓
+[JMS Consumer] (na aplicação)
+  ↓ recebe notificação instantânea da AQ
+  ↓ publica no Kafka
+  ↓ marca mensagem como publicada
+```
+
+**Vantagens:**
+- ✅ Latência mínima (notificação push)
+- ✅ Reduz carga de polling no banco
+- ✅ Integração nativa com Oracle
+
+**Desvantagens:**
+- ❌ Requer Oracle AQ configurado e licenciado
+- ❌ Maior complexidade de setup
+- ❌ Dependências adicionais (Oracle AQ libraries)
+
+**Setup Oracle AQ:**
+```sql
+-- Ver script completo em: producer-app/src/main/resources/oracle-outbox-setup.sql
+BEGIN
+    DBMS_AQADM.CREATE_QUEUE_TABLE(...);
+    DBMS_AQADM.CREATE_QUEUE(...);
+    DBMS_AQADM.START_QUEUE(...);
+END;
+```
+
+#### 3. **Debezium com Oracle Connector** (Alternativa Externa)
+
+Usar Debezium para capturar mudanças (CDC) na tabela de outbox Oracle:
+
+```
+[Oracle OUTBOX_MESSAGES]
+  ↓
+[Debezium Oracle Connector] (via LogMiner ou XStream)
+  ↓ captura INSERTs via CDC
+  ↓ publica diretamente no Kafka
+  ↓
+[Kafka Topic]
+```
+
+**Vantagens:**
+- ✅ Desacoplado da aplicação
+- ✅ Baixa latência
+- ✅ Escalável
+
+**Desvantagens:**
+- ❌ Infraestrutura adicional (Kafka Connect)
+- ❌ Requer permissões especiais no Oracle (LogMiner/XStream)
+- ❌ Mais complexo de configurar
+
+### Escolha da Abordagem
+
+**Recomendação:** Usar **Polling JDBC** (implementação atual) por padrão.
+
+- Se latência < 1s é crítica: considerar **Oracle AQ/JMS**
+- Se preferir desacoplar do código: considerar **Debezium**
+
+O projeto já implementa Polling JDBC e tem suporte básico para Oracle AQ (estruturas criadas no SQL script).
 
 ## 📊 Como Funciona
 
@@ -426,7 +604,7 @@ Métricas expostas:
 - processing_duration_ms (bigint)
 ```
 
-### Tabela: `outbox_messages`
+### Tabela: `outbox_messages` (PostgreSQL)
 ```sql
 - id (bigserial)
 - payload (text)
@@ -438,6 +616,22 @@ Métricas expostas:
 - client_id (varchar)
 - task_id (varchar)          -- NEW: usado para agregação por task
 ```
+
+### Tabela: `OUTBOX_MESSAGES` (Oracle)
+```sql
+- ID (NUMBER(19))            -- Primary key com OUTBOX_SEQ
+- PAYLOAD (CLOB)             -- JSON payload
+- MESSAGE_KEY (VARCHAR2(500))
+- TOPIC (VARCHAR2(255))
+- PUBLISHED (NUMBER(1))      -- 0=false, 1=true
+- CREATED_AT (TIMESTAMP WITH TIME ZONE)
+- PUBLISHED_AT (TIMESTAMP WITH TIME ZONE)
+- CLIENT_ID (VARCHAR2(255))
+- TASK_ID (VARCHAR2(255))    -- Usado para agregação por task
+```
+
+**Nota:** Para setup completo do Oracle, execute o script:
+`producer-app/src/main/resources/oracle-outbox-setup.sql`
 
 ### Tabela: `task_snapshots`
 ```sql
@@ -499,12 +693,15 @@ WHERE t.task_id = 'TASK-001';
 
 ### Perfis de Execução
 
-O sistema suporta dois perfis através da variável `SPRING_PROFILES_ACTIVE`:
+O sistema suporta três perfis através da variável `SPRING_PROFILES_ACTIVE`:
 
-- **`docker`** (padrão): Usa Kafka e PostgreSQL locais (localhost)
-- **`local`**: Usa Kafka e PostgreSQL externos via variáveis de ambiente
+- **`local`** (padrão): Usa Kafka e PostgreSQL externos via variáveis de ambiente (ambiente empresarial sem Docker)
+- **`docker`**: Usa Kafka e PostgreSQL locais (localhost) via docker-compose
+- **`oracle`**: Usa Oracle Database para outbox com Kafka externo via variáveis de ambiente
 
-### Variáveis de Ambiente (perfil `local`)
+### Variáveis de Ambiente
+
+#### Perfil `local` (PostgreSQL empresarial)
 
 ```bash
 # PostgreSQL
@@ -515,8 +712,54 @@ DATASOURCE_PASSWORD=senha
 # Kafka
 KAFKA_BOOTSTRAP_SERVERS=kafka-host:9092
 
-# Perfil ativo
+# Perfil ativo (opcional, já é o padrão)
 SPRING_PROFILES_ACTIVE=local
+```
+
+#### Perfil `docker` (Docker local)
+
+```bash
+# Não requer variáveis de ambiente - usa valores hardcoded em application-docker.yml
+# Para ativar:
+SPRING_PROFILES_ACTIVE=docker
+```
+
+#### Perfil `oracle` (Oracle Database)
+
+```bash
+# Oracle Database
+ORACLE_DATASOURCE_URL=jdbc:oracle:thin:@host:port:SID
+ORACLE_DATASOURCE_USERNAME=usuario
+ORACLE_DATASOURCE_PASSWORD=senha
+
+# Kafka
+KAFKA_BOOTSTRAP_SERVERS=kafka-host:9092
+
+# Oracle AQ (opcional)
+ORACLE_AQ_QUEUE_NAME=OUTBOX_QUEUE
+ORACLE_AQ_QUEUE_TABLE=OUTBOX_QUEUE_TABLE
+ORACLE_AQ_POLL_INTERVAL_MS=1000
+
+# Perfil ativo
+SPRING_PROFILES_ACTIVE=oracle
+```
+
+### Como Alternar Entre Perfis
+
+**Opção 1: Variável de ambiente**
+```bash
+export SPRING_PROFILES_ACTIVE=docker  # ou local, ou oracle
+mvn spring-boot:run
+```
+
+**Opção 2: Argumento da linha de comando**
+```bash
+mvn spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=docker"
+```
+
+**Opção 3: Propriedade do sistema**
+```bash
+mvn spring-boot:run -Dspring.profiles.active=docker
 ```
 
 ### Configurações do Consumer (application.yml)
@@ -586,7 +829,8 @@ spec:
 - **Spring Boot 3.1.5**
 - **Spring Kafka** (não Spring Cloud Stream)
 - **Hibernate 6.2.13** (Jakarta Persistence API)
-- **PostgreSQL 15**
+- **PostgreSQL 15** (para perfil local/docker)
+- **Oracle Database 12c+** (para perfil oracle - opcional)
 - **Kafka 7.5.0** (modo KRaft, sem Zookeeper)
 - **Prometheus + Grafana**
 - **Testcontainers 1.19.1**
@@ -599,6 +843,60 @@ spec:
 docker-compose logs kafka
 # Verificar se a porta 9092 está livre
 # Recriar o volume se necessário: docker-compose down -v
+```
+
+### Perfil não está sendo aplicado corretamente
+```bash
+# Verificar qual perfil está ativo nos logs de inicialização:
+# Procurar por: "The following profiles are active: local"
+
+# Forçar perfil específico:
+export SPRING_PROFILES_ACTIVE=docker  # ou local, ou oracle
+mvn spring-boot:run
+
+# Verificar configuração carregada:
+curl http://localhost:8080/actuator/env | jq '.propertySources'
+```
+
+### Oracle: Erro de conexão
+```bash
+# Verificar URL do JDBC:
+# Formato thin: jdbc:oracle:thin:@hostname:port:SID
+# Formato service: jdbc:oracle:thin:@hostname:port/service_name
+# TNS: jdbc:oracle:thin:@(DESCRIPTION=(...))
+
+# Testar conectividade:
+telnet seu-oracle-host 1521
+
+# Verificar se o usuário tem permissões:
+# - SELECT, INSERT, UPDATE, DELETE em OUTBOX_MESSAGES
+# - SELECT em OUTBOX_SEQ
+# - (Opcional) EXECUTE em DBMS_AQ, DBMS_AQADM para Oracle AQ
+```
+
+### Oracle: Tabela OUTBOX_MESSAGES não encontrada
+```bash
+# Executar o script de setup:
+sqlplus usuario/senha@SID @producer-app/src/main/resources/oracle-outbox-setup.sql
+
+# Verificar se a tabela foi criada:
+sqlplus usuario/senha@SID
+SQL> SELECT table_name FROM user_tables WHERE table_name = 'OUTBOX_MESSAGES';
+SQL> SELECT sequence_name FROM user_sequences WHERE sequence_name = 'OUTBOX_SEQ';
+```
+
+### Oracle: Mensagens não estão sendo publicadas
+```bash
+# Verificar mensagens pendentes no outbox:
+sqlplus usuario/senha@SID
+SQL> SELECT COUNT(*) FROM OUTBOX_MESSAGES WHERE PUBLISHED = 0;
+
+# Verificar logs do producer:
+# Procurar por: "Processing N unpublished messages from Oracle outbox"
+
+# Verificar se o serviço Oracle está ativo:
+# Procurar por: "OracleOutboxPollingService" nos logs
+# Se não aparecer, verificar se app.outbox.use-oracle=true no perfil
 ```
 
 ### Rebalances frequentes

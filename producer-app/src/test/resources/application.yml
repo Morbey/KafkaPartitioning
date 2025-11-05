@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: producer-app-test
+  
+  # Test profile - no active profile needed, use Testcontainers  
+  datasource:
+    driver-class-name: org.postgresql.Driver
+  
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: create  # Create schema for each test
+    show-sql: true  # Enable SQL logging for debugging
+    properties:
+      hibernate:
+        format_sql: true
+        use_sql_comments: true
+  
+  # Kafka Producer Configuration for tests
+  kafka:
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+  
+# Application-specific configuration
+app:
+  kafka:
+    topic: task-topic
+    snapshot-topic: task-snapshots
+  outbox:
+    # Disable Oracle outbox for tests (use PostgreSQL)
+    use-oracle: false
+    poll-interval-ms: 100  # Faster polling for tests
+    batch-size: 100
+    aggregator-interval-ms: 100  # Faster aggregation for tests
+    debounce-ms: 50  # Shorter debounce for tests
