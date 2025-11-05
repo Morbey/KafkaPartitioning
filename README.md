@@ -37,7 +37,7 @@ kafkaPartitionsPoc/
 
 ## ⚙️ Configuração de Ambientes
 
-Este projeto suporta dois ambientes de execução:
+Este projeto suporta dois ambientes de execução. Para instruções detalhadas, consulte [CONFIGURACAO_AMBIENTES.md](CONFIGURACAO_AMBIENTES.md).
 
 ### 🏢 Ambiente Empresarial (Perfil `local`)
 Para usar Kafka e PostgreSQL externos (sem Docker local):
@@ -59,34 +59,18 @@ Para usar Kafka e PostgreSQL externos (sem Docker local):
    mvn spring-boot:run -Dspring-boot.run.profiles=local
    ```
 
-   Ou definir variável de ambiente:
-   ```bash
-   export SPRING_PROFILES_ACTIVE=local
-   mvn spring-boot:run
-   ```
-
-### 🐳 Ambiente Docker Local (Perfil `docker`)
-Para usar Kafka e PostgreSQL em containers Docker (padrão):
+### 🐳 Ambiente Docker Local (Perfil `docker` - padrão)
+Para usar Kafka e PostgreSQL em containers Docker:
 
 1. **Iniciar infraestrutura**:
    ```bash
    docker-compose up -d
    ```
 
-2. **Executar aplicações** (perfil docker é o padrão):
+2. **Executar aplicações**:
    ```bash
-   # Producer
-   cd producer-app
-   mvn spring-boot:run
-   
-   # Consumer
-   cd consumer-app
-   mvn spring-boot:run
-   ```
-
-   Ou explicitamente:
-   ```bash
-   mvn spring-boot:run -Dspring-boot.run.profiles=docker
+   cd producer-app && mvn spring-boot:run
+   cd consumer-app && mvn spring-boot:run
    ```
 
 ## 🚀 Quick Start

@@ -1,10 +1,13 @@
 #!/bin/bash
 
 # Script para executar múltiplas instâncias do consumer
-# Uso: ./run-consumers.sh [número de instâncias]
+# Uso: ./run-consumers.sh [número de instâncias] [profile]
+#   número de instâncias: 1-10 (default: 3)
+#   profile: docker (default) or local
 
 # Número de instâncias (default: 3)
 NUM_INSTANCES=${1:-3}
+PROFILE=${2:-docker}
 
 # Porta base (8081, 8082, 8083, ...)
 BASE_PORT=8081
@@ -14,6 +17,7 @@ CONSUMER_DIR="consumer-app"
 
 echo "================================================"
 echo "  Kafka Consumer - Múltiplas Instâncias"
+echo "  Profile: $PROFILE"
 echo "================================================"
 echo ""
 echo "Iniciando $NUM_INSTANCES instâncias do consumer..."
@@ -68,10 +72,10 @@ for ((i=0; i<NUM_INSTANCES; i++)); do
     PORT=$((BASE_PORT + i))
     INSTANCE_ID=$((i + 1))
     
-    echo "[$INSTANCE_ID] Iniciando consumer na porta $PORT..."
+    echo "[$INSTANCE_ID] Iniciando consumer na porta $PORT com profile $PROFILE..."
     
     # Executar o JAR em background
-    java -jar "$CONSUMER_DIR/target/consumer-app-0.0.1-SNAPSHOT.jar" \
+    java -jar -Dspring.profiles.active=$PROFILE "$CONSUMER_DIR/target/consumer-app-0.0.1-SNAPSHOT.jar" \
         --server.port=$PORT \
         --spring.application.instance-id=consumer-$INSTANCE_ID \
         > "consumer-$INSTANCE_ID.log" 2>&1 &
@@ -88,6 +92,7 @@ done
 echo ""
 echo "================================================"
 echo "  Todas as instâncias iniciadas!"
+echo "  Profile: $PROFILE"
 echo "================================================"
 echo ""
 echo "Instâncias em execução:"

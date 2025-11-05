@@ -1,13 +1,15 @@
 #!/bin/bash
 
 # Script para executar o producer
-# Uso: ./run-producer.sh
+# Uso: ./run-producer.sh [profile]
+#   profile: docker (default) or local
 
+PROFILE=${1:-docker}
 PRODUCER_DIR="producer-app"
 PORT=8080
 
 echo "================================================"
-echo "  Kafka Producer"
+echo "  Kafka Producer (Profile: $PROFILE)"
 echo "================================================"
 echo ""
 
@@ -45,17 +47,18 @@ if [ ! -f "$PRODUCER_DIR/target/producer-app-0.0.1-SNAPSHOT.jar" ]; then
     fi
 fi
 
-echo "Iniciando producer na porta $PORT..."
+echo "Iniciando producer na porta $PORT com profile $PROFILE..."
 echo ""
 
 # Executar o JAR
-java -jar "$PRODUCER_DIR/target/producer-app-0.0.1-SNAPSHOT.jar" \
+java -jar -Dspring.profiles.active=$PROFILE "$PRODUCER_DIR/target/producer-app-0.0.1-SNAPSHOT.jar" \
     --server.port=$PORT \
     > producer.log 2>&1 &
 
 PRODUCER_PID=$!
 
 echo "Producer iniciado com PID $PRODUCER_PID"
+echo "Profile: $PROFILE"
 echo "Logs: producer.log"
 echo ""
 echo "================================================"
