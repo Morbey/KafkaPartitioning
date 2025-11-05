@@ -1,15 +1,16 @@
 spring:
-  # Database configuration for enterprise environment (externalized)
-  # Override these values with environment variables or command-line arguments:
-  # -Dspring.datasource.url=jdbc:postgresql://your-enterprise-postgres:5432/yourdb
-  # -Dspring.datasource.username=yourusername
-  # -Dspring.datasource.password=yourpassword
+  # Database configuration for enterprise environment
+  # REQUIRED: Set these environment variables when using the 'local' profile:
+  #   DATASOURCE_URL - JDBC URL for your enterprise PostgreSQL (e.g., jdbc:postgresql://postgres.company.com:5432/yourdb)
+  #   DATASOURCE_USERNAME - Database username
+  #   DATASOURCE_PASSWORD - Database password
   datasource:
-    url: ${DATASOURCE_URL:jdbc:postgresql://your-enterprise-postgres-host:5432/yourdb}
-    username: ${DATASOURCE_USERNAME:yourusername}
-    password: ${DATASOURCE_PASSWORD:yourpassword}
+    url: ${DATASOURCE_URL}
+    username: ${DATASOURCE_USERNAME}
+    password: ${DATASOURCE_PASSWORD}
   
-  # Kafka Producer Configuration for enterprise environment (externalized)
-  # Override with: -Dspring.kafka.bootstrap-servers=your-enterprise-kafka:9092
+  # Kafka Producer Configuration for enterprise environment
+  # REQUIRED: Set this environment variable when using the 'local' profile:
+  #   KAFKA_BOOTSTRAP_SERVERS - Kafka bootstrap servers (e.g., kafka.company.com:9092)
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:your-enterprise-kafka-host:9092}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
