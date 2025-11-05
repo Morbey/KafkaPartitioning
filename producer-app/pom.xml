@@ -52,6 +52,14 @@
             <version>${postgresql.version}</version>
         </dependency>
 
+        <!-- Oracle JDBC Driver (optional - only for oracle profile) -->
+        <dependency>
+            <groupId>com.oracle.database.jdbc</groupId>
+            <artifactId>ojdbc8</artifactId>
+            <version>21.9.0.0</version>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Micrometer Prometheus for metrics -->
         <dependency>
             <groupId>io.micrometer</groupId>
