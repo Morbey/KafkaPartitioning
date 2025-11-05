@@ -1,12 +1,14 @@
 # Kafka Partitions PoC - Modern Setup without Zookeeper
 
-Este projeto demonstra uma aplicação completa de Kafka usando Spring Kafka (sem Spring Cloud Stream), com persistência em PostgreSQL usando Hibernate 6, padrão Transactional Outbox, e monitorização com Prometheus e Grafana.
+Este projeto demonstra uma aplicação completa de Kafka usando Spring Kafka (sem Spring Cloud Stream), com persistência em PostgreSQL usando Hibernate 6, padrão Transactional Outbox, **agregação de snapshots por task**, e monitorização com Prometheus e Grafana.
 
 ## 🎯 Características Principais
 
 - ✅ **Kafka em modo KRaft** - Sem dependência de Zookeeper
 - ✅ **Persistência completa** - PostgreSQL com Hibernate 6
 - ✅ **Padrão Outbox** - Produção transacional de mensagens
+- ✅ **Agregação por Task** - Snapshots completos em vez de mensagens por atributo
+- ✅ **Read-Model materializado** - Tabela `task_snapshots` para consulta eficiente
 - ✅ **Hierarquia de dados** - Task → TaskAttribute → TaskAttributeValue
 - ✅ **Processamento simulado** - Delay configurável (2-20 segundos)
 - ✅ **Prevenção de rebalances** - Configurações otimizadas para processamento longo
@@ -14,6 +16,7 @@ Este projeto demonstra uma aplicação completa de Kafka usando Spring Kafka (se
 - ✅ **Monitorização** - Prometheus + Grafana com métricas personalizadas
 - ✅ **Testes de integração** - Testcontainers com Kafka e PostgreSQL
 - ✅ **Distribuição por partições** - Mensagens distribuídas por key (cliente)
+- ✅ **Multi-ambiente** - Suporte para Docker local e ambientes empresariais externos
 
 ## 📋 Estrutura do Projeto
 
@@ -41,9 +44,22 @@ kafkaPartitionsPoc/
 
 - Java 17+
 - Maven 3.6+
-- Docker e Docker Compose
+- Docker e Docker Compose (para ambiente local)
+- **OU** acesso a Kafka e PostgreSQL externos (ambiente empresarial)
+
+### Escolher o Perfil de Execução
+
+Este projeto suporta dois perfis:
+
+#### 1. **Perfil `docker`** (padrão) - Ambiente Local com Docker
+Usa Kafka e PostgreSQL levantados localmente via `docker-compose`.
+
+#### 2. **Perfil `local`** - Ambiente Empresarial (sem Docker)
+Usa Kafka e PostgreSQL externos configurados via variáveis de ambiente.
 
 ### 1. Iniciar Infraestrutura
+
+#### Opção A: Ambiente Local com Docker (perfil `docker`)
 
 ```bash
 docker-compose up -d
@@ -55,6 +71,23 @@ Isto inicia:
 - **Prometheus** (porta 9090) - coleta de métricas
 - **Grafana** (porta 3000) - visualização de métricas (admin/admin)
 
+#### Opção B: Ambiente Empresarial (perfil `local`)
+
+Configurar as seguintes variáveis de ambiente apontando para os seus servidores:
+
+```bash
+# Configuração do PostgreSQL
+export DATASOURCE_URL="jdbc:postgresql://seu-postgres-empresarial:5432/suadb"
+export DATASOURCE_USERNAME="seuusuario"
+export DATASOURCE_PASSWORD="suasenha"
+
+# Configuração do Kafka
+export KAFKA_BOOTSTRAP_SERVERS="seu-kafka-empresarial:9092"
+
+# Activar o perfil 'local'
+export SPRING_PROFILES_ACTIVE="local"
+```
+
 ### 2. Build do Projeto
 
 ```bash
@@ -63,14 +96,33 @@ mvn clean install
 
 ### 3. Executar Producer
 
+#### Com perfil Docker (padrão):
 ```bash
 cd producer-app
+mvn spring-boot:run
+```
+
+#### Com perfil Empresarial (local):
+```bash
+cd producer-app
+mvn spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=local"
+```
+
+**Ou** com variáveis de ambiente inline:
+```bash
+SPRING_PROFILES_ACTIVE=local \
+DATASOURCE_URL="jdbc:postgresql://seu-postgres:5432/suadb" \
+DATASOURCE_USERNAME="seuusuario" \
+DATASOURCE_PASSWORD="suasenha" \
+KAFKA_BOOTSTRAP_SERVERS="seu-kafka:9092" \
 mvn spring-boot:run
 ```
 
 O producer estará disponível em http://localhost:8080
 
 ### 4. Executar Consumer(s)
+
+#### Com perfil Docker (padrão):
 
 **Terminal 1 (Consumer 1):**
 ```bash
@@ -90,6 +142,18 @@ cd consumer-app
 mvn spring-boot:run -Dspring-boot.run.arguments="--server.port=8083"
 ```
 
+#### Com perfil Empresarial (local):
+
+```bash
+cd consumer-app
+SPRING_PROFILES_ACTIVE=local \
+DATASOURCE_URL="jdbc:postgresql://seu-postgres:5432/suadb" \
+DATASOURCE_USERNAME="seuusuario" \
+DATASOURCE_PASSWORD="suasenha" \
+KAFKA_BOOTSTRAP_SERVERS="seu-kafka:9092" \
+mvn spring-boot:run
+```
+
 ## 📊 Como Funciona
 
 ### Padrão Outbox (Producer)
@@ -100,6 +164,23 @@ mvn spring-boot:run -Dspring-boot.run.arguments="--server.port=8083"
 4. Publica no Kafka e marca como `published = true`
 5. Usa `messageKey` para distribuir por partições
 
+### Agregação de Outbox por Task (Snapshot Pattern)
+
+Para lidar com alto volume de mensagens por task (ex: múltiplas alterações de atributos), 
+o sistema implementa um padrão de agregação:
+
+1. **OutboxAggregatorService** (agendado a cada 500ms) agrupa mensagens outbox por `task_id`
+2. Aplica uma janela de **debounce** (200ms por padrão) para aguardar mensagens relacionadas
+3. **Merge** de atributos: última alteração de cada atributo prevalece
+4. Publica um **snapshot completo** da task no tópico `task-snapshots`
+5. Marca mensagens originais como publicadas
+
+**Benefícios:**
+- Reduz drasticamente o número de mensagens enviadas ao Kafka
+- Frontend consome apenas snapshots completos (simplifica lógica)
+- Mantém ordenação por task (via partition key = taskId)
+- Garante atomicidade (transacional)
+
 ### Consumer com Persistência
 
 1. Recebe mensagem do Kafka (`@KafkaListener`)
@@ -108,6 +189,14 @@ mvn spring-boot:run -Dspring-boot.run.arguments="--server.port=8083"
 4. Tenta fazer parse como estrutura `Task` e persiste hierarquia
 5. Atualiza `MessageRecord` com `processedAt` e `processingDurationMs`
 6. **Commit manual** do offset apenas após persistência bem-sucedida
+
+### Consumer de Snapshots (Read-Model)
+
+1. **TaskSnapshotConsumer** consome do tópico `task-snapshots`
+2. Atualiza tabela `task_snapshots` (read-model materializado)
+3. Cada task tem um único registo com a versão mais recente
+4. Frontend consulta `task_snapshots` para obter estado completo
+5. Notificação pode ser enviada via WebSocket após atualização (future work)
 
 ### Evitar Rebalances
 
@@ -276,6 +365,19 @@ Métricas expostas:
 - created_at (timestamptz)
 - published_at (timestamptz)
 - client_id (varchar)
+- task_id (varchar)          -- NEW: usado para agregação por task
+```
+
+### Tabela: `task_snapshots`
+```sql
+- id (bigserial)
+- task_id (varchar, unique)  -- Identificador único da task
+- snapshot_data (text)       -- JSON completo do snapshot
+- version (bigint)           -- Versão do snapshot (incrementa a cada update)
+- created_at (timestamptz)   -- Quando foi criado
+- updated_at (timestamptz)   -- Última atualização
+- kafka_offset (bigint)      -- Offset do Kafka de origem
+- kafka_partition (integer)  -- Partição do Kafka
 ```
 
 ## 🎭 Cenários de Teste
@@ -324,6 +426,28 @@ WHERE t.task_id = 'TASK-001';
 
 ## 🔧 Configurações Importantes
 
+### Perfis de Execução
+
+O sistema suporta dois perfis através da variável `SPRING_PROFILES_ACTIVE`:
+
+- **`docker`** (padrão): Usa Kafka e PostgreSQL locais (localhost)
+- **`local`**: Usa Kafka e PostgreSQL externos via variáveis de ambiente
+
+### Variáveis de Ambiente (perfil `local`)
+
+```bash
+# PostgreSQL
+DATASOURCE_URL=jdbc:postgresql://host:port/database
+DATASOURCE_USERNAME=usuario
+DATASOURCE_PASSWORD=senha
+
+# Kafka
+KAFKA_BOOTSTRAP_SERVERS=kafka-host:9092
+
+# Perfil ativo
+SPRING_PROFILES_ACTIVE=local
+```
+
 ### Configurações do Consumer (application.yml)
 
 ```yaml
@@ -345,6 +469,12 @@ app.processing:
 app.outbox:
   poll-interval-ms: 1000                 # Poll a cada 1 segundo
   batch-size: 100                        # Processar até 100 msgs por vez
+  aggregator-interval-ms: 500            # Intervalo do agregador
+  debounce-ms: 200                       # Janela de debounce para agregação
+  
+app.kafka:
+  topic: task-topic                      # Tópico principal
+  snapshot-topic: task-snapshots         # Tópico de snapshots agregados
 ```
 
 ## 🐳 Deployment em Kubernetes

@@ -2,11 +2,12 @@ spring:
   application:
     name: producer-app
   
+  # Default profile - use 'docker' for local Docker setup, 'local' for enterprise environment
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:docker}
+  
   # Database configuration
   datasource:
-    url: jdbc:postgresql://localhost:5432/kafkadb
-    username: kafkauser
-    password: kafkapass
     driver-class-name: org.postgresql.Driver
   
   # JPA/Hibernate configuration
@@ -22,7 +23,6 @@ spring:
   
   # Kafka Producer Configuration
   kafka:
-    bootstrap-servers: localhost:9092
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
@@ -38,11 +38,15 @@ spring:
 app:
   kafka:
     topic: task-topic
+    snapshot-topic: task-snapshots
   outbox:
     # Poll interval for checking new messages (milliseconds)
     poll-interval-ms: 1000
     # Batch size for processing outbox messages
     batch-size: 100
+    # Aggregator configuration
+    aggregator-interval-ms: 500
+    debounce-ms: 200
 
 server:
   port: 8080
