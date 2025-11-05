@@ -1,22 +1,19 @@
+# Local profile - For corporate environment (external Kafka and PostgreSQL)
+# To use: mvn spring-boot:run -Dspring-boot.run.profiles=local
+# Or set environment variable: SPRING_PROFILES_ACTIVE=local
+
 spring:
   application:
     name: consumer-app
   
-  # Profile configuration
-  # Default profile is 'docker' for local development with Docker
-  # Use 'local' profile for corporate environment
-  # To change: set SPRING_PROFILES_ACTIVE=local or use -Dspring.profiles.active=local
-  profiles:
-    active: docker
-  
-  # Database configuration
+  # Database configuration - Corporate PostgreSQL
   datasource:
-    url: jdbc:postgresql://localhost:5432/kafkadb
-    username: kafkauser
-    password: kafkapass
+    # Change these values to point to your corporate PostgreSQL instance
+    url: jdbc:postgresql://your-corporate-db-host:5432/kafkadb
+    username: your-db-username
+    password: your-db-password
     driver-class-name: org.postgresql.Driver
   
-  # JPA/Hibernate configuration
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
@@ -31,29 +28,24 @@ spring:
         order_inserts: true
         order_updates: true
   
-  # Kafka Consumer Configuration
+  # Kafka Consumer Configuration - Corporate Kafka
   kafka:
-    bootstrap-servers: localhost:9092
+    # Change this to point to your corporate Kafka instance
+    bootstrap-servers: your-corporate-kafka-host:9092
     consumer:
       group-id: task-consumer-group
       auto-offset-reset: earliest
       enable-auto-commit: false
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      # Critical settings to avoid rebalances during long processing
       max-poll-records: 1
       properties:
-        # Maximum time between polls (5 minutes) - adjust based on max processing time
         max.poll.interval.ms: 300000
-        # Session timeout - how long consumer can be silent before being considered dead
         session.timeout.ms: 60000
-        # Heartbeat interval - must be less than session timeout
         heartbeat.interval.ms: 20000
-        # Partition assignment strategy
         partition.assignment.strategy: org.apache.kafka.clients.consumer.CooperativeStickyAssignor
     listener:
       ack-mode: manual_immediate
-      # Number of concurrent consumer threads per listener
       concurrency: 3
 
 # Application-specific configuration
@@ -61,7 +53,6 @@ app:
   kafka:
     topic: task-topic
   processing:
-    # Processing delay range in seconds (2-20)
     min-delay-seconds: 2
     max-delay-seconds: 20
 
@@ -84,7 +75,7 @@ logging:
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
-# Actuator configuration for monitoring
+# Actuator configuration
 management:
   endpoints:
     web:
@@ -101,4 +92,3 @@ management:
         enabled: true
     tags:
       application: ${spring.application.name}
-

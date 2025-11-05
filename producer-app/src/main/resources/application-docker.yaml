@@ -1,22 +1,18 @@
+# Docker profile - For local development with Docker containers
+# To use: mvn spring-boot:run -Dspring-boot.run.profiles=docker
+# Or set environment variable: SPRING_PROFILES_ACTIVE=docker
+
 spring:
   application:
     name: producer-app
   
-  # Profile configuration
-  # Default profile is 'docker' for local development with Docker
-  # Use 'local' profile for corporate environment
-  # To change: set SPRING_PROFILES_ACTIVE=local or use -Dspring.profiles.active=local
-  profiles:
-    active: docker
-  
-  # Database configuration
+  # Database configuration - Docker PostgreSQL
   datasource:
     url: jdbc:postgresql://localhost:5432/kafkadb
     username: kafkauser
     password: kafkapass
     driver-class-name: org.postgresql.Driver
   
-  # JPA/Hibernate configuration
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
@@ -27,17 +23,15 @@ spring:
         format_sql: true
         use_sql_comments: true
   
-  # Kafka Producer Configuration
+  # Kafka Producer Configuration - Docker Kafka
   kafka:
     bootstrap-servers: localhost:9092
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
-      # Producer reliability settings
       acks: all
       retries: 3
       properties:
-        # Enable idempotence for exactly-once semantics
         enable.idempotence: true
         max.in.flight.requests.per.connection: 5
 
@@ -46,9 +40,7 @@ app:
   kafka:
     topic: task-topic
   outbox:
-    # Poll interval for checking new messages (milliseconds)
     poll-interval-ms: 1000
-    # Batch size for processing outbox messages
     batch-size: 100
 
 server:
@@ -64,7 +56,7 @@ logging:
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
-# Actuator configuration for monitoring
+# Actuator configuration
 management:
   endpoints:
     web:
@@ -81,4 +73,3 @@ management:
         enabled: true
     tags:
       application: ${spring.application.name}
-
