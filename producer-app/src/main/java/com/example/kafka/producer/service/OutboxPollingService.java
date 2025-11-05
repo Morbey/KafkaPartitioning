@@ -81,8 +81,8 @@ public class OutboxPollingService {
                 outboxMessage.getPayload()
             );
             
-            // Wait for the send to complete to ensure proper ordering in tests
-            SendResult<String, String> result = future.get();
+            // Wait for the send to complete with timeout to prevent indefinite blocking
+            SendResult<String, String> result = future.get(30, java.util.concurrent.TimeUnit.SECONDS);
             
             // Mark as published in a transaction
             markAsPublished(outboxMessage);
@@ -95,7 +95,7 @@ public class OutboxPollingService {
         } catch (Exception e) {
             logger.error("Failed to publish message {}: {}", outboxMessage.getId(), e.getMessage());
             failedCounter.increment();
-            throw new RuntimeException("Failed to publish message", e);
+            throw new RuntimeException("Failed to publish message " + outboxMessage.getId(), e);
         }
     }
     
