@@ -71,6 +71,13 @@ Isto inicia:
 - **Prometheus** (porta 9090) - coleta de métricas
 - **Grafana** (porta 3000) - visualização de métricas (admin/admin)
 
+**Criar tópico de snapshots (opcional, será criado automaticamente):**
+```bash
+docker exec -it kafka kafka-topics --bootstrap-server localhost:9092 \
+  --create --topic task-snapshots --partitions 3 --replication-factor 1 \
+  --config cleanup.policy=compact
+```
+
 #### Opção B: Ambiente Empresarial (perfil `local`)
 
 Configurar as seguintes variáveis de ambiente apontando para os seus servidores:
@@ -153,6 +160,70 @@ DATASOURCE_PASSWORD="suasenha" \
 KAFKA_BOOTSTRAP_SERVERS="seu-kafka:9092" \
 mvn spring-boot:run
 ```
+
+## 🏗️ Arquitetura para Alto Volume
+
+### Cenário: Milhares de Alterações por Task
+
+Quando uma task sofre muitas alterações (ex: atualização massiva de atributos), sem agregação cada alteração geraria uma mensagem no Kafka, sobrecarregando o sistema e o frontend.
+
+### Solução Implementada: Snapshot Aggregator
+
+**Fluxo:**
+
+```
+[Producer] 
+  ↓ insere outbox (atributo A mudou)
+  ↓ insere outbox (atributo B mudou)
+  ↓ insere outbox (atributo C mudou)
+  ↓
+[OutboxAggregatorService] (scheduled 500ms)
+  ↓ agrupa por task_id
+  ↓ aplica debounce (200ms)
+  ↓ merge: última versão de cada atributo
+  ↓ publica 1 snapshot completo → topic 'task-snapshots'
+  ↓ marca mensagens originais como published
+  ↓
+[TaskSnapshotConsumer]
+  ↓ consome snapshot
+  ↓ atualiza task_snapshots (read-model)
+  ↓ frontend lê versão completa
+  ↓ (opcional) notifica frontend via WebSocket
+```
+
+### Configuração para Alto Débito
+
+**Produtor:**
+- `aggregator-interval-ms: 500` - Frequência de agregação
+- `debounce-ms: 200` - Janela de espera antes de agregar
+- Ajustar conforme volume (maior debounce = mais agregação, menor latência)
+
+**Consumidor de Snapshots:**
+- Usar tópico `task-snapshots` particionado por `taskId`
+- Garantir ordenação por task (partition key)
+- Consumer group dedicado (`task-snapshot-consumer-group`)
+- Escalar consumidores conforme partições
+
+**Kafka:**
+- Criar tópico `task-snapshots` com número adequado de partições
+- Configurar `cleanup.policy=compact` para reter apenas último snapshot por key
+- Monitorizar consumer lag
+
+### Alternativas Consideradas
+
+1. **Mensagens por atributo + marcador final**: 
+   - ❌ Complexo de implementar (changeSetId, seqNo, isLast)
+   - ❌ Frontend precisa reconstruir estado
+   
+2. **Kafka Streams para agregação**:
+   - ✅ Escalável e robusto
+   - ❌ Mais complexo de configurar e manter
+   
+3. **Snapshot no Produtor** (escolhido):
+   - ✅ Simples e eficaz
+   - ✅ Menos mensagens no Kafka
+   - ✅ Frontend consome estado completo
+   - ⚠️ Debounce pode adicionar latência (200ms)
 
 ## 📊 Como Funciona
 
