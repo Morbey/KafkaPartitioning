@@ -1,220 +1,220 @@
 # Kafka Partitions PoC - Modern Setup without Zookeeper
 
-Este projeto demonstra uma aplicação completa de Kafka usando Spring Kafka (sem Spring Cloud Stream), com persistência em PostgreSQL/Oracle usando Hibernate 6, padrão Transactional Outbox, **agregação de snapshots por task**, e monitorização com Prometheus e Grafana.
+This project demonstrates a complete Kafka application using Spring Kafka (without Spring Cloud Stream), with persistence in PostgreSQL/Oracle using Hibernate 6, Transactional Outbox pattern, **snapshot aggregation per task**, and monitoring with Prometheus and Grafana.
 
-## 🎯 Características Principais
+## 🎯 Key Features
 
-- ✅ **Kafka em modo KRaft** - Sem dependência de Zookeeper
-- ✅ **Persistência completa** - PostgreSQL com Hibernate 6
-- ✅ **Suporte Oracle** - Outbox em Oracle Database com polling JDBC ou Oracle AQ/JMS
-- ✅ **Padrão Outbox** - Produção transacional de mensagens
-- ✅ **Agregação por Task** - Snapshots completos em vez de mensagens por atributo
-- ✅ **Read-Model materializado** - Tabela `task_snapshots` para consulta eficiente
-- ✅ **Hierarquia de dados** - Task → TaskAttribute → TaskAttributeValue
-- ✅ **Processamento simulado** - Delay configurável (2-20 segundos)
-- ✅ **Prevenção de rebalances** - Configurações otimizadas para processamento longo
-- ✅ **Graceful shutdown** - Endpoint para parar consumo antes de terminar o pod
-- ✅ **Monitorização** - Prometheus + Grafana com métricas personalizadas
-- ✅ **Testes de integração** - Testcontainers com Kafka e PostgreSQL
-- ✅ **Distribuição por partições** - Mensagens distribuídas por key (cliente)
-- ✅ **Multi-ambiente** - Suporte para Docker local, PostgreSQL empresarial e Oracle Database
-- ✅ **Perfil padrão empresarial** - Configurado para usar serviços externos sem Docker
+- ✅ **Kafka in KRaft mode** - No Zookeeper dependency
+- ✅ **Complete persistence** - PostgreSQL with Hibernate 6
+- ✅ **Oracle support** - Outbox in Oracle Database with JDBC polling or Oracle AQ/JMS
+- ✅ **Outbox pattern** - Transactional message production
+- ✅ **Task aggregation** - Complete snapshots instead of per-attribute messages
+- ✅ **Materialized read-model** - `task_snapshots` table for efficient queries
+- ✅ **Data hierarchy** - Task → TaskAttribute → TaskAttributeValue
+- ✅ **Simulated processing** - Configurable delay (2-20 seconds)
+- ✅ **Rebalance prevention** - Optimized configurations for long processing
+- ✅ **Graceful shutdown** - Endpoint to stop consumption before terminating pod
+- ✅ **Monitoring** - Prometheus + Grafana with custom metrics
+- ✅ **Integration tests** - Testcontainers with Kafka and PostgreSQL
+- ✅ **Partition distribution** - Messages distributed by key (client)
+- ✅ **Multi-environment** - Support for local Docker, enterprise PostgreSQL and Oracle Database
+- ✅ **Enterprise default profile** - Configured to use external services without Docker
 
-## 📋 Estrutura do Projeto
+## 📋 Project Structure
 
 ```
 kafkaPartitionsPoc/
-├── consumer-app/          # Aplicação consumidora com persistência
+├── consumer-app/          # Consumer application with persistence
 │   ├── entity/           # Task, TaskAttribute, TaskAttributeValue, MessageRecord
 │   ├── repository/       # Spring Data JPA repositories
-│   ├── service/          # TaskConsumerService com processamento 2-20s
-│   ├── config/           # Kafka consumer config com rebalance prevention
+│   ├── service/          # TaskConsumerService with 2-20s processing
+│   ├── config/           # Kafka consumer config with rebalance prevention
 │   └── controller/       # Endpoint /internal/stop-consuming
-├── producer-app/          # Aplicação produtora com Outbox pattern
+├── producer-app/          # Producer application with Outbox pattern
 │   ├── entity/           # OutboxMessage
 │   ├── repository/       # OutboxMessageRepository
 │   ├── service/          # OutboxPollingService (scheduler)
-│   ├── controller/       # REST API para adicionar mensagens ao outbox
+│   ├── controller/       # REST API to add messages to outbox
 │   └── config/           # Kafka producer config
-├── monitoring/            # Configurações Prometheus + Grafana
+├── monitoring/            # Prometheus + Grafana configurations
 └── docker-compose.yml     # Kafka (KRaft), PostgreSQL, Prometheus, Grafana
 ```
 
 ## 🚀 Quick Start
 
-### Pré-requisitos
+### Prerequisites
 
 - Java 17+
 - Maven 3.6+
-- Docker e Docker Compose (para ambiente local)
-- **OU** acesso a Kafka e PostgreSQL externos (ambiente empresarial)
+- Docker and Docker Compose (for local environment)
+- **OR** access to external Kafka and PostgreSQL (enterprise environment)
 
-### Escolher o Perfil de Execução
+### Choose Execution Profile
 
-Este projeto suporta três perfis de execução:
+This project supports three execution profiles:
 
-#### 1. **Perfil `local`** (padrão) - Ambiente Empresarial (sem Docker)
-Usa Kafka e PostgreSQL externos configurados via variáveis de ambiente.
-**Este é o perfil padrão** - ideal para ambientes empresariais profissionais.
+#### 1. **`local` Profile** (default) - Enterprise Environment (without Docker)
+Uses external Kafka and PostgreSQL configured via environment variables.
+**This is the default profile** - ideal for professional enterprise environments.
 
-#### 2. **Perfil `docker`** - Ambiente Local com Docker
-Usa Kafka e PostgreSQL levantados localmente via `docker-compose`.
-Use este perfil apenas quando explicitamente solicitado para desenvolvimento local.
+#### 2. **`docker` Profile** - Local Environment with Docker
+Uses Kafka and PostgreSQL launched locally via `docker-compose`.
+Use this profile only when explicitly requested for local development.
 
-#### 3. **Perfil `oracle`** - Ambiente com Oracle Database
-Usa Oracle Database para a tabela de outbox, com Kafka externo.
-Ideal para ambientes onde Oracle AQ/JMS já está em uso.
+#### 3. **`oracle` Profile** - Environment with Oracle Database
+Uses Oracle Database for the outbox table, with external Kafka.
+Ideal for environments where Oracle AQ/JMS is already in use.
 
-### 1. Iniciar Infraestrutura
+### 1. Start Infrastructure
 
-#### Opção A: Ambiente Empresarial (perfil `local`) - PADRÃO
+#### Option A: Enterprise Environment (`local` profile) - DEFAULT
 
-Configurar as seguintes variáveis de ambiente apontando para os seus servidores:
+Configure the following environment variables pointing to your servers:
 
 ```bash
-# Configuração do PostgreSQL
-export DATASOURCE_URL="jdbc:postgresql://seu-postgres-empresarial:5432/suadb"
-export DATASOURCE_USERNAME="seuusuario"
-export DATASOURCE_PASSWORD="suasenha"
+# PostgreSQL configuration
+export DATASOURCE_URL="jdbc:postgresql://your-enterprise-postgres:5432/yourdb"
+export DATASOURCE_USERNAME="yourusername"
+export DATASOURCE_PASSWORD="yourpassword"
 
-# Configuração do Kafka
-export KAFKA_BOOTSTRAP_SERVERS="seu-kafka-empresarial:9092"
+# Kafka configuration
+export KAFKA_BOOTSTRAP_SERVERS="your-enterprise-kafka:9092"
 
-# O perfil 'local' é ativado automaticamente (padrão)
-# Para explicitamente definir: export SPRING_PROFILES_ACTIVE="local"
+# The 'local' profile is activated automatically (default)
+# To explicitly define: export SPRING_PROFILES_ACTIVE="local"
 ```
 
-#### Opção B: Ambiente Local com Docker (perfil `docker`)
+#### Option B: Local Environment with Docker (`docker` profile)
 
 ```bash
-# Primeiro, iniciar o Docker Compose
+# First, start Docker Compose
 docker-compose up -d
 ```
 
-Isto inicia:
-- **Kafka** (porta 9092) - modo KRaft, sem Zookeeper
-- **PostgreSQL** (porta 5432) - banco de dados para ambas as aplicações
-- **Prometheus** (porta 9090) - coleta de métricas
-- **Grafana** (porta 3000) - visualização de métricas (admin/admin)
+This starts:
+- **Kafka** (port 9092) - KRaft mode, without Zookeeper
+- **PostgreSQL** (port 5432) - database for both applications
+- **Prometheus** (port 9090) - metrics collection
+- **Grafana** (port 3000) - metrics visualization (admin/admin)
 
-**Criar tópico de snapshots (opcional, será criado automaticamente):**
+**Create snapshot topic (optional, will be created automatically):**
 ```bash
 docker exec -it kafka kafka-topics --bootstrap-server localhost:9092 \
   --create --topic task-snapshots --partitions 3 --replication-factor 1 \
   --config cleanup.policy=compact
 ```
 
-**Para usar este perfil, defina:**
+**To use this profile, define:**
 ```bash
 export SPRING_PROFILES_ACTIVE="docker"
 ```
 
-#### Opção C: Ambiente com Oracle Database (perfil `oracle`)
+#### Option C: Environment with Oracle Database (`oracle` profile)
 
-**1. Executar o script SQL de setup do Oracle:**
+**1. Execute the Oracle setup SQL script:**
 ```sql
--- Execute o script em: producer-app/src/main/resources/oracle-outbox-setup.sql
--- Este script cria:
--- - Tabela OUTBOX_MESSAGES
--- - Sequence OUTBOX_SEQ
--- - Índices de performance
--- - (Opcional) Oracle AQ queue para integração JMS
+-- Execute the script in: producer-app/src/main/resources/oracle-outbox-setup.sql
+-- This script creates:
+-- - OUTBOX_MESSAGES table
+-- - OUTBOX_SEQ sequence
+-- - Performance indexes
+-- - (Optional) Oracle AQ queue for JMS integration
 ```
 
-**2. Configurar variáveis de ambiente:**
+**2. Configure environment variables:**
 ```bash
-# Configuração do Oracle Database
-export ORACLE_DATASOURCE_URL="jdbc:oracle:thin:@seu-oracle:1521:ORCL"
-export ORACLE_DATASOURCE_USERNAME="seuusuario"
-export ORACLE_DATASOURCE_PASSWORD="suasenha"
+# Oracle Database configuration
+export ORACLE_DATASOURCE_URL="jdbc:oracle:thin:@your-oracle:1521:ORCL"
+export ORACLE_DATASOURCE_USERNAME="yourusername"
+export ORACLE_DATASOURCE_PASSWORD="yourpassword"
 
-# Configuração do Kafka
-export KAFKA_BOOTSTRAP_SERVERS="seu-kafka-empresarial:9092"
+# Kafka configuration
+export KAFKA_BOOTSTRAP_SERVERS="your-enterprise-kafka:9092"
 
-# (Opcional) Configuração do Oracle AQ
+# (Optional) Oracle AQ configuration
 export ORACLE_AQ_QUEUE_NAME="OUTBOX_QUEUE"
 export ORACLE_AQ_QUEUE_TABLE="OUTBOX_QUEUE_TABLE"
 export ORACLE_AQ_POLL_INTERVAL_MS="1000"
 
-# Ativar o perfil 'oracle'
+# Activate the 'oracle' profile
 export SPRING_PROFILES_ACTIVE="oracle"
 ```
 
-**Notas sobre Oracle:**
-- O outbox Oracle usa polling JDBC por padrão (similar ao PostgreSQL)
-- Oracle AQ (Advanced Queuing) é opcional e pode ser configurado para integração JMS
-- A tabela de outbox usa CLOB para payloads grandes
-- Limpeza automática de mensagens antigas pode ser configurada (ver SQL script)
+**Notes about Oracle:**
+- Oracle outbox uses JDBC polling by default (similar to PostgreSQL)
+- Oracle AQ (Advanced Queuing) is optional and can be configured for JMS integration
+- The outbox table uses CLOB for large payloads
+- Automatic cleanup of old messages can be configured (see SQL script)
 
 
-### 2. Build do Projeto
+### 2. Build the Project
 
 ```bash
 mvn clean install
 ```
 
-### 3. Executar Producer
+### 3. Run Producer
 
-#### Com perfil Empresarial `local` (padrão):
+#### With Enterprise `local` profile (default):
 ```bash
 cd producer-app
-# Assumindo que as variáveis de ambiente já estão configuradas (ver seção 1)
+# Assuming environment variables are already configured (see section 1)
 mvn spring-boot:run
 ```
 
-**Ou** com variáveis de ambiente inline:
+**Or** with inline environment variables:
 ```bash
 cd producer-app
-DATASOURCE_URL="jdbc:postgresql://seu-postgres:5432/suadb" \
-DATASOURCE_USERNAME="seuusuario" \
-DATASOURCE_PASSWORD="suasenha" \
-KAFKA_BOOTSTRAP_SERVERS="seu-kafka:9092" \
+DATASOURCE_URL="jdbc:postgresql://your-postgres:5432/yourdb" \
+DATASOURCE_USERNAME="yourusername" \
+DATASOURCE_PASSWORD="yourpassword" \
+KAFKA_BOOTSTRAP_SERVERS="your-kafka:9092" \
 mvn spring-boot:run
 ```
 
-#### Com perfil Docker:
+#### With Docker profile:
 ```bash
 cd producer-app
 mvn spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=docker"
 ```
 
-#### Com perfil Oracle:
+#### With Oracle profile:
 ```bash
 cd producer-app
 SPRING_PROFILES_ACTIVE=oracle \
-ORACLE_DATASOURCE_URL="jdbc:oracle:thin:@seu-oracle:1521:ORCL" \
-ORACLE_DATASOURCE_USERNAME="seuusuario" \
-ORACLE_DATASOURCE_PASSWORD="suasenha" \
-KAFKA_BOOTSTRAP_SERVERS="seu-kafka:9092" \
+ORACLE_DATASOURCE_URL="jdbc:oracle:thin:@your-oracle:1521:ORCL" \
+ORACLE_DATASOURCE_USERNAME="yourusername" \
+ORACLE_DATASOURCE_PASSWORD="yourpassword" \
+KAFKA_BOOTSTRAP_SERVERS="your-kafka:9092" \
 mvn spring-boot:run
 ```
 
-O producer estará disponível em http://localhost:8080
+The producer will be available at http://localhost:8080
 
-### 4. Executar Consumer(s)
+### 4. Run Consumer(s)
 
-#### Com perfil Empresarial `local` (padrão):
+#### With Enterprise `local` profile (default):
 
 **Terminal 1 (Consumer 1):**
 ```bash
 cd consumer-app
-# Assumindo que as variáveis de ambiente já estão configuradas
+# Assuming environment variables are already configured
 mvn spring-boot:run
 ```
 
-**Terminal 2 (Consumer 2 - opcional):**
+**Terminal 2 (Consumer 2 - optional):**
 ```bash
 cd consumer-app
 mvn spring-boot:run -Dspring-boot.run.arguments="--server.port=8082"
 ```
 
-**Terminal 3 (Consumer 3 - opcional):**
+**Terminal 3 (Consumer 3 - optional):**
 ```bash
 cd consumer-app
 mvn spring-boot:run -Dspring-boot.run.arguments="--server.port=8083"
 ```
 
-#### Com perfil Docker:
+#### With Docker profile:
 
 **Terminal 1 (Consumer 1):**
 ```bash
@@ -222,147 +222,147 @@ cd consumer-app
 mvn spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=docker"
 ```
 
-**Terminal 2 (Consumer 2 - opcional):**
+**Terminal 2 (Consumer 2 - optional):**
 ```bash
 cd consumer-app
 mvn spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=docker --server.port=8082"
 ```
 
-#### Com perfil Empresarial (variáveis inline):
+#### With Enterprise profile (inline variables):
 
 ```bash
 cd consumer-app
-DATASOURCE_URL="jdbc:postgresql://seu-postgres:5432/suadb" \
-DATASOURCE_USERNAME="seuusuario" \
-DATASOURCE_PASSWORD="suasenha" \
-KAFKA_BOOTSTRAP_SERVERS="seu-kafka:9092" \
+DATASOURCE_URL="jdbc:postgresql://your-postgres:5432/yourdb" \
+DATASOURCE_USERNAME="yourusername" \
+DATASOURCE_PASSWORD="yourpassword" \
+KAFKA_BOOTSTRAP_SERVERS="your-kafka:9092" \
 mvn spring-boot:run
 ```
 
-## 🏗️ Arquitetura para Alto Volume
+## 🏗️ Architecture for High Volume
 
-### Cenário: Milhares de Alterações por Task
+### Scenario: Thousands of Changes per Task
 
-Quando uma task sofre muitas alterações (ex: atualização massiva de atributos), sem agregação cada alteração geraria uma mensagem no Kafka, sobrecarregando o sistema e o frontend.
+When a task undergoes many changes (e.g., massive attribute updates), without aggregation each change would generate a message in Kafka, overloading the system and the frontend.
 
-### Solução Implementada: Snapshot Aggregator
+### Implemented Solution: Snapshot Aggregator
 
-**Fluxo:**
+**Flow:**
 
 ```
 [Producer] 
-  ↓ insere outbox (atributo A mudou)
-  ↓ insere outbox (atributo B mudou)
-  ↓ insere outbox (atributo C mudou)
+  ↓ inserts outbox (attribute A changed)
+  ↓ inserts outbox (attribute B changed)
+  ↓ inserts outbox (attribute C changed)
   ↓
 [OutboxAggregatorService] (scheduled 500ms)
-  ↓ agrupa por task_id
-  ↓ aplica debounce (200ms)
-  ↓ merge: última versão de cada atributo
-  ↓ publica 1 snapshot completo → topic 'task-snapshots'
-  ↓ marca mensagens originais como published
+  ↓ groups by task_id
+  ↓ applies debounce (200ms)
+  ↓ merge: latest version of each attribute
+  ↓ publishes 1 complete snapshot → topic 'task-snapshots'
+  ↓ marks original messages as published
   ↓
 [TaskSnapshotConsumer]
-  ↓ consome snapshot
-  ↓ atualiza task_snapshots (read-model)
-  ↓ frontend lê versão completa
-  ↓ (opcional) notifica frontend via WebSocket
+  ↓ consumes snapshot
+  ↓ updates task_snapshots (read-model)
+  ↓ frontend reads complete version
+  ↓ (optional) notifies frontend via WebSocket
 ```
 
-### Configuração para Alto Débito
+### Configuration for High Throughput
 
-**Produtor:**
-- `aggregator-interval-ms: 500` - Frequência de agregação
-- `debounce-ms: 200` - Janela de espera antes de agregar
-- Ajustar conforme volume (maior debounce = mais agregação, menor latência)
+**Producer:**
+- `aggregator-interval-ms: 500` - Aggregation frequency
+- `debounce-ms: 200` - Wait window before aggregating
+- Adjust according to volume (higher debounce = more aggregation, lower latency)
 
-**Consumidor de Snapshots:**
-- Usar tópico `task-snapshots` particionado por `taskId`
-- Garantir ordenação por task (partition key)
-- Consumer group dedicado (`task-snapshot-consumer-group`)
-- Escalar consumidores conforme partições
+**Snapshot Consumer:**
+- Use `task-snapshots` topic partitioned by `taskId`
+- Ensure ordering by task (partition key)
+- Dedicated consumer group (`task-snapshot-consumer-group`)
+- Scale consumers according to partitions
 
 **Kafka:**
-- Criar tópico `task-snapshots` com número adequado de partições
-- Configurar `cleanup.policy=compact` para reter apenas último snapshot por key
-- Monitorizar consumer lag
+- Create `task-snapshots` topic with adequate number of partitions
+- Configure `cleanup.policy=compact` to retain only the latest snapshot per key
+- Monitor consumer lag
 
-### Alternativas Consideradas
+### Considered Alternatives
 
-1. **Mensagens por atributo + marcador final**: 
-   - ❌ Complexo de implementar (changeSetId, seqNo, isLast)
-   - ❌ Frontend precisa reconstruir estado
+1. **Per-attribute messages + final marker**: 
+   - ❌ Complex to implement (changeSetId, seqNo, isLast)
+   - ❌ Frontend needs to reconstruct state
    
-2. **Kafka Streams para agregação**:
-   - ✅ Escalável e robusto
-   - ❌ Mais complexo de configurar e manter
+2. **Kafka Streams for aggregation**:
+   - ✅ Scalable and robust
+   - ❌ More complex to configure and maintain
    
-3. **Snapshot no Produtor** (escolhido):
-   - ✅ Simples e eficaz
-   - ✅ Menos mensagens no Kafka
-   - ✅ Frontend consome estado completo
-   - ⚠️ Debounce pode adicionar latência (200ms)
+3. **Snapshot in Producer** (chosen):
+   - ✅ Simple and effective
+   - ✅ Fewer messages in Kafka
+   - ✅ Frontend consumes complete state
+   - ⚠️ Debounce can add latency (200ms)
 
-## 🔌 Integração com Oracle Database
+## 🔌 Oracle Database Integration
 
-O projeto suporta Oracle Database como alternativa ao PostgreSQL para a tabela de outbox, ideal para ambientes empresariais que já utilizam Oracle e/ou Oracle AQ (Advanced Queuing).
+The project supports Oracle Database as an alternative to PostgreSQL for the outbox table, ideal for enterprise environments that already use Oracle and/or Oracle AQ (Advanced Queuing).
 
-### Abordagens de Integração
+### Integration Approaches
 
-#### 1. **Polling JDBC** (Implementação Atual - Recomendada)
+#### 1. **JDBC Polling** (Current Implementation - Recommended)
 
-A abordagem mais simples e compatível com todos os ambientes Oracle:
+The simplest approach compatible with all Oracle environments:
 
 ```
-[Aplicação]
-  ↓ insere transacionalmente em OUTBOX_MESSAGES (Oracle)
+[Application]
+  ↓ transactionally inserts into OUTBOX_MESSAGES (Oracle)
   ↓
 [OracleOutboxPollingService] (scheduled 1s)
-  ↓ consulta: SELECT * FROM OUTBOX_MESSAGES WHERE PUBLISHED = 0
-  ↓ publica mensagens no Kafka
-  ↓ atualiza: UPDATE OUTBOX_MESSAGES SET PUBLISHED = 1
+  ↓ queries: SELECT * FROM OUTBOX_MESSAGES WHERE PUBLISHED = 0
+  ↓ publishes messages to Kafka
+  ↓ updates: UPDATE OUTBOX_MESSAGES SET PUBLISHED = 1
 ```
 
-**Vantagens:**
-- ✅ Simples de implementar e manter
-- ✅ Não requer configuração adicional do Oracle
-- ✅ Funciona com qualquer versão do Oracle (12c+)
-- ✅ Transacional e confiável
+**Advantages:**
+- ✅ Simple to implement and maintain
+- ✅ Requires no additional Oracle configuration
+- ✅ Works with any Oracle version (12c+)
+- ✅ Transactional and reliable
 
-**Desvantagens:**
-- ⚠️ Latência de polling (configurável, padrão 1s)
-- ⚠️ Carga adicional no banco (queries periódicas)
+**Disadvantages:**
+- ⚠️ Polling latency (configurable, default 1s)
+- ⚠️ Additional database load (periodic queries)
 
-#### 2. **Oracle AQ/JMS** (Disponível - Opcional)
+#### 2. **Oracle AQ/JMS** (Available - Optional)
 
-Abordagem baseada em mensageria nativa do Oracle, usando Oracle Advanced Queuing:
+Approach based on Oracle's native messaging, using Oracle Advanced Queuing:
 
 ```
-[Aplicação]
-  ↓ insere transacionalmente em OUTBOX_MESSAGES (Oracle)
-  ↓ (trigger opcional) enfileira mensagem em AQ
+[Application]
+  ↓ transactionally inserts into OUTBOX_MESSAGES (Oracle)
+  ↓ (optional trigger) enqueues message to AQ
   ↓
 [Oracle AQ Queue: OUTBOX_QUEUE]
   ↓
-[JMS Consumer] (na aplicação)
-  ↓ recebe notificação instantânea da AQ
-  ↓ publica no Kafka
-  ↓ marca mensagem como publicada
+[JMS Consumer] (in application)
+  ↓ receives instant notification from AQ
+  ↓ publishes to Kafka
+  ↓ marks message as published
 ```
 
-**Vantagens:**
-- ✅ Latência mínima (notificação push)
-- ✅ Reduz carga de polling no banco
-- ✅ Integração nativa com Oracle
+**Advantages:**
+- ✅ Minimal latency (push notification)
+- ✅ Reduces polling load on database
+- ✅ Native Oracle integration
 
-**Desvantagens:**
-- ❌ Requer Oracle AQ configurado e licenciado
-- ❌ Maior complexidade de setup
-- ❌ Dependências adicionais (Oracle AQ libraries)
+**Disadvantages:**
+- ❌ Requires Oracle AQ configured and licensed
+- ❌ Higher setup complexity
+- ❌ Additional dependencies (Oracle AQ libraries)
 
-**Setup Oracle AQ:**
+**Oracle AQ Setup:**
 ```sql
--- Ver script completo em: producer-app/src/main/resources/oracle-outbox-setup.sql
+-- See complete script in: producer-app/src/main/resources/oracle-outbox-setup.sql
 BEGIN
     DBMS_AQADM.CREATE_QUEUE_TABLE(...);
     DBMS_AQADM.CREATE_QUEUE(...);
@@ -370,125 +370,125 @@ BEGIN
 END;
 ```
 
-#### 3. **Debezium com Oracle Connector** (Alternativa Externa)
+#### 3. **Debezium with Oracle Connector** (External Alternative)
 
-Usar Debezium para capturar mudanças (CDC) na tabela de outbox Oracle:
+Use Debezium to capture changes (CDC) in the Oracle outbox table:
 
 ```
 [Oracle OUTBOX_MESSAGES]
   ↓
-[Debezium Oracle Connector] (via LogMiner ou XStream)
-  ↓ captura INSERTs via CDC
-  ↓ publica diretamente no Kafka
+[Debezium Oracle Connector] (via LogMiner or XStream)
+  ↓ captures INSERTs via CDC
+  ↓ publishes directly to Kafka
   ↓
 [Kafka Topic]
 ```
 
-**Vantagens:**
-- ✅ Desacoplado da aplicação
-- ✅ Baixa latência
-- ✅ Escalável
+**Advantages:**
+- ✅ Decoupled from application
+- ✅ Low latency
+- ✅ Scalable
 
-**Desvantagens:**
-- ❌ Infraestrutura adicional (Kafka Connect)
-- ❌ Requer permissões especiais no Oracle (LogMiner/XStream)
-- ❌ Mais complexo de configurar
+**Disadvantages:**
+- ❌ Additional infrastructure (Kafka Connect)
+- ❌ Requires special Oracle permissions (LogMiner/XStream)
+- ❌ More complex to configure
 
-### Escolha da Abordagem
+### Approach Selection
 
-**Recomendação:** Usar **Polling JDBC** (implementação atual) por padrão.
+**Recommendation:** Use **JDBC Polling** (current implementation) by default.
 
-- Se latência < 1s é crítica: considerar **Oracle AQ/JMS**
-- Se preferir desacoplar do código: considerar **Debezium**
+- If latency < 1s is critical: consider **Oracle AQ/JMS**
+- If you prefer to decouple from code: consider **Debezium**
 
-O projeto já implementa Polling JDBC e tem suporte básico para Oracle AQ (estruturas criadas no SQL script).
+The project already implements JDBC Polling and has basic support for Oracle AQ (structures created in the SQL script).
 
-## 📊 Como Funciona
+## 📊 How It Works
 
-### Padrão Outbox (Producer)
+### Outbox Pattern (Producer)
 
-1. Cliente faz POST para `/api/publish` ou `/api/publish-batch`
-2. Mensagem é **inserida na tabela `outbox_messages`** (transacional)
-3. `OutboxPollingService` (agendado a cada 1s) lê mensagens não publicadas
-4. Publica no Kafka e marca como `published = true`
-5. Usa `messageKey` para distribuir por partições
+1. Client makes POST to `/api/publish` or `/api/publish-batch`
+2. Message is **inserted into `outbox_messages` table** (transactional)
+3. `OutboxPollingService` (scheduled every 1s) reads unpublished messages
+4. Publishes to Kafka and marks as `published = true`
+5. Uses `messageKey` to distribute across partitions
 
-### Agregação de Outbox por Task (Snapshot Pattern)
+### Outbox Aggregation by Task (Snapshot Pattern)
 
-Para lidar com alto volume de mensagens por task (ex: múltiplas alterações de atributos), 
-o sistema implementa um padrão de agregação:
+To handle high volume of messages per task (e.g., multiple attribute changes), 
+the system implements an aggregation pattern:
 
-1. **OutboxAggregatorService** (agendado a cada 500ms) agrupa mensagens outbox por `task_id`
-2. Aplica uma janela de **debounce** (200ms por padrão) para aguardar mensagens relacionadas
-3. **Merge** de atributos: última alteração de cada atributo prevalece
-4. Publica um **snapshot completo** da task no tópico `task-snapshots`
-5. Marca mensagens originais como publicadas
+1. **OutboxAggregatorService** (scheduled every 500ms) groups outbox messages by `task_id`
+2. Applies a **debounce** window (200ms by default) to wait for related messages
+3. **Merge** of attributes: latest change of each attribute prevails
+4. Publishes a **complete snapshot** of the task to the `task-snapshots` topic
+5. Marks original messages as published
 
-**Benefícios:**
-- Reduz drasticamente o número de mensagens enviadas ao Kafka
-- Frontend consome apenas snapshots completos (simplifica lógica)
-- Mantém ordenação por task (via partition key = taskId)
-- Garante atomicidade (transacional)
+**Benefits:**
+- Drastically reduces the number of messages sent to Kafka
+- Frontend consumes only complete snapshots (simplifies logic)
+- Maintains ordering by task (via partition key = taskId)
+- Ensures atomicity (transactional)
 
-### Consumer com Persistência
+### Consumer with Persistence
 
-1. Recebe mensagem do Kafka (`@KafkaListener`)
-2. Cria `MessageRecord` com `receivedAt` timestamp
-3. **Simula processamento** (delay 2-20 segundos aleatório)
-4. Tenta fazer parse como estrutura `Task` e persiste hierarquia
-5. Atualiza `MessageRecord` com `processedAt` e `processingDurationMs`
-6. **Commit manual** do offset apenas após persistência bem-sucedida
+1. Receives message from Kafka (`@KafkaListener`)
+2. Creates `MessageRecord` with `receivedAt` timestamp
+3. **Simulates processing** (random 2-20 second delay)
+4. Tries to parse as `Task` structure and persists hierarchy
+5. Updates `MessageRecord` with `processedAt` and `processingDurationMs`
+6. **Manual commit** of offset only after successful persistence
 
-### Consumer de Snapshots (Read-Model)
+### Snapshot Consumer (Read-Model)
 
-1. **TaskSnapshotConsumer** consome do tópico `task-snapshots`
-2. Atualiza tabela `task_snapshots` (read-model materializado)
-3. Cada task tem um único registo com a versão mais recente
-4. Frontend consulta `task_snapshots` para obter estado completo
-5. Notificação pode ser enviada via WebSocket após atualização (future work)
+1. **TaskSnapshotConsumer** consumes from `task-snapshots` topic
+2. Updates `task_snapshots` table (materialized read-model)
+3. Each task has a single record with the most recent version
+4. Frontend queries `task_snapshots` to get complete state
+5. Notification can be sent via WebSocket after update (future work)
 
-### Evitar Rebalances
+### Avoiding Rebalances
 
-Configuração em `consumer-app/application.yml`:
+Configuration in `consumer-app/application.yml`:
 
 ```yaml
-max.poll.interval.ms: 300000      # 5 minutos - tempo máximo entre polls
-session.timeout.ms: 60000          # 1 minuto - tempo de sessão
-heartbeat.interval.ms: 20000       # 20 segundos - intervalo de heartbeat
-max.poll.records: 1                # 1 mensagem por poll (controle fino)
+max.poll.interval.ms: 300000      # 5 minutes - maximum time between polls
+session.timeout.ms: 60000          # 1 minute - session time
+heartbeat.interval.ms: 20000       # 20 seconds - heartbeat interval
+max.poll.records: 1                # 1 message per poll (fine control)
 ```
 
-## 🧪 Testes de Integração
+## 🧪 Integration Tests
 
-Execute os testes:
+Run the tests:
 
 ```bash
 mvn test
 ```
 
-Os testes usam:
-- **Testcontainers** para PostgreSQL e Kafka
-- **@EmbeddedKafka** para testes com Kafka
-- **Awaitility** para assertions assíncronas
+The tests use:
+- **Testcontainers** for PostgreSQL and Kafka
+- **@EmbeddedKafka** for Kafka tests
+- **Awaitility** for asynchronous assertions
 
-### Testes do Consumer
+### Consumer Tests
 
-- Consumo de mensagem única
-- Múltiplas mensagens com keys diferentes
-- Parsing de estrutura Task hierárquica
-- Verificação de timestamps e duração
+- Single message consumption
+- Multiple messages with different keys
+- Task hierarchical structure parsing
+- Timestamp and duration verification
 
-### Testes do Producer
+### Producer Tests
 
-- Publicação via outbox pattern
-- Distribuição por partições
-- Múltiplas mensagens com diferentes clientes
+- Publishing via outbox pattern
+- Distribution across partitions
+- Multiple messages with different clients
 
-## 📡 Endpoints API
+## 📡 API Endpoints
 
-### Producer App (porta 8080)
+### Producer App (port 8080)
 
-#### Publicar mensagem única
+#### Publish single message
 ```bash
 curl -X POST http://localhost:8080/api/publish \
   -H "Content-Type: application/json" \
@@ -498,7 +498,7 @@ curl -X POST http://localhost:8080/api/publish \
   }'
 ```
 
-#### Publicar lote de mensagens
+#### Publish batch of messages
 ```bash
 curl -X POST http://localhost:8080/api/publish-batch \
   -H "Content-Type: application/json" \
@@ -508,7 +508,7 @@ curl -X POST http://localhost:8080/api/publish-batch \
   }'
 ```
 
-#### Estatísticas do Outbox
+#### Outbox statistics
 ```bash
 curl http://localhost:8080/api/outbox/stats
 ```
@@ -519,51 +519,51 @@ curl http://localhost:8080/api/health
 curl http://localhost:8080/actuator/health
 ```
 
-### Consumer App (porta 8081+)
+### Consumer App (port 8081+)
 
-#### Parar consumo (graceful shutdown)
+#### Stop consumption (graceful shutdown)
 ```bash
 curl -X POST http://localhost:8081/internal/stop-consuming
 ```
 
-#### Métricas Prometheus
+#### Prometheus metrics
 ```bash
 curl http://localhost:8081/actuator/prometheus
 ```
 
-## 📈 Monitorização
+## 📈 Monitoring
 
 ### Prometheus
 
-Aceda a http://localhost:9090
+Access at http://localhost:9090
 
-Queries úteis:
+Useful queries:
 ```promql
-# Taxa de mensagens processadas por segundo
+# Rate of messages processed per second
 rate(kafka_consumer_fetch_manager_records_consumed_total[1m])
 
-# Duração média de processamento
+# Average processing duration
 avg(kafka_consumer_processing_duration_ms)
 
-# Mensagens no outbox não publicadas
+# Unpublished messages in outbox
 outbox_messages_unpublished_total
 ```
 
 ### Grafana
 
-1. Aceda a http://localhost:3000 (admin/admin)
-2. O datasource Prometheus já está configurado
-3. Crie dashboards personalizados ou importe templates
+1. Access at http://localhost:3000 (admin/admin)
+2. Prometheus datasource is already configured
+3. Create custom dashboards or import templates
 
-Métricas expostas:
-- `outbox.messages.published` - Total de mensagens publicadas
-- `outbox.messages.failed` - Total de falhas na publicação
-- Métricas padrão do Kafka (consumer lag, throughput, etc.)
-- Métricas da aplicação (JVM, CPU, memória)
+Exposed metrics:
+- `outbox.messages.published` - Total published messages
+- `outbox.messages.failed` - Total publication failures
+- Standard Kafka metrics (consumer lag, throughput, etc.)
+- Application metrics (JVM, CPU, memory)
 
-## 🗄️ Estrutura da Base de Dados
+## 🗄️ Database Structure
 
-### Tabela: `tasks`
+### Table: `tasks`
 ```sql
 - id (bigserial)
 - task_id (varchar, unique)
@@ -571,7 +571,7 @@ Métricas expostas:
 - created_at (timestamptz)
 ```
 
-### Tabela: `task_attributes`
+### Table: `task_attributes`
 ```sql
 - id (bigserial)
 - task_id (bigint FK)
@@ -579,7 +579,7 @@ Métricas expostas:
 - attribute_type (varchar) -- STRING, NUMERIC, DATE, BOOLEAN, ENTITY, TEXT
 ```
 
-### Tabela: `task_attribute_values`
+### Table: `task_attribute_values`
 ```sql
 - id (bigserial)
 - attribute_id (bigint FK)
@@ -591,7 +591,7 @@ Métricas expostas:
 - text_value (text)
 ```
 
-### Tabela: `message_records`
+### Table: `message_records`
 ```sql
 - id (bigserial)
 - raw_message (text)
@@ -604,7 +604,7 @@ Métricas expostas:
 - processing_duration_ms (bigint)
 ```
 
-### Tabela: `outbox_messages` (PostgreSQL)
+### Table: `outbox_messages` (PostgreSQL)
 ```sql
 - id (bigserial)
 - payload (text)
@@ -614,12 +614,12 @@ Métricas expostas:
 - created_at (timestamptz)
 - published_at (timestamptz)
 - client_id (varchar)
-- task_id (varchar)          -- NEW: usado para agregação por task
+- task_id (varchar)          -- NEW: used for task aggregation
 ```
 
-### Tabela: `OUTBOX_MESSAGES` (Oracle)
+### Table: `OUTBOX_MESSAGES` (Oracle)
 ```sql
-- ID (NUMBER(19))            -- Primary key com OUTBOX_SEQ
+- ID (NUMBER(19))            -- Primary key with OUTBOX_SEQ
 - PAYLOAD (CLOB)             -- JSON payload
 - MESSAGE_KEY (VARCHAR2(500))
 - TOPIC (VARCHAR2(255))
@@ -627,49 +627,49 @@ Métricas expostas:
 - CREATED_AT (TIMESTAMP WITH TIME ZONE)
 - PUBLISHED_AT (TIMESTAMP WITH TIME ZONE)
 - CLIENT_ID (VARCHAR2(255))
-- TASK_ID (VARCHAR2(255))    -- Usado para agregação por task
+- TASK_ID (VARCHAR2(255))    -- Used for task aggregation
 ```
 
-**Nota:** Para setup completo do Oracle, execute o script:
+**Note:** For complete Oracle setup, execute the script:
 `producer-app/src/main/resources/oracle-outbox-setup.sql`
 
-### Tabela: `task_snapshots`
+### Table: `task_snapshots`
 ```sql
 - id (bigserial)
-- task_id (varchar, unique)  -- Identificador único da task
-- snapshot_data (text)       -- JSON completo do snapshot
-- version (bigint)           -- Versão do snapshot (incrementa a cada update)
-- created_at (timestamptz)   -- Quando foi criado
-- updated_at (timestamptz)   -- Última atualização
-- kafka_offset (bigint)      -- Offset do Kafka de origem
-- kafka_partition (integer)  -- Partição do Kafka
+- task_id (varchar, unique)  -- Unique task identifier
+- snapshot_data (text)       -- Complete JSON snapshot
+- version (bigint)           -- Snapshot version (increments on each update)
+- created_at (timestamptz)   -- When it was created
+- updated_at (timestamptz)   -- Last update
+- kafka_offset (bigint)      -- Source Kafka offset
+- kafka_partition (integer)  -- Kafka partition
 ```
 
-## 🎭 Cenários de Teste
+## 🎭 Test Scenarios
 
-### Teste 1: Distribuição Básica
-1. Iniciar 1 consumer
-2. Publicar 30 mensagens: `POST /api/publish-batch` com `count: 30`
-3. Observar que o consumer processa de todas as 3 partições
-4. Verificar logs para ver duração de processamento (2-20s por mensagem)
+### Test 1: Basic Distribution
+1. Start 1 consumer
+2. Publish 30 messages: `POST /api/publish-batch` with `count: 30`
+3. Observe that the consumer processes from all 3 partitions
+4. Check logs to see processing duration (2-20s per message)
 
-### Teste 2: Rebalanceamento
-1. Iniciar 1 consumer (porta 8081)
-2. Publicar mensagens
-3. Iniciar 2º consumer (porta 8082) → observar rebalance nos logs
-4. Publicar mais mensagens → distribuídas entre consumers
-5. Parar 2º consumer → observar rebalance novamente
+### Test 2: Rebalancing
+1. Start 1 consumer (port 8081)
+2. Publish messages
+3. Start 2nd consumer (port 8082) → observe rebalance in logs
+4. Publish more messages → distributed between consumers
+5. Stop 2nd consumer → observe rebalance again
 
-### Teste 3: Outbox Pattern em Tempo Real
-1. Inserir mensagens diretamente na tabela outbox:
+### Test 3: Real-time Outbox Pattern
+1. Insert messages directly into the outbox table:
 ```sql
 INSERT INTO outbox_messages (payload, message_key, topic, client_id, published, created_at)
 VALUES ('Manual message', 'client-1', 'task-topic', 'client-1', false, NOW());
 ```
-2. Observar mensagem ser publicada automaticamente (em 1s)
-3. Verificar consumer processa a mensagem
+2. Observe message being published automatically (in 1s)
+3. Verify consumer processes the message
 
-### Teste 4: Processamento com Estrutura Task
+### Test 4: Processing with Task Structure
 ```bash
 curl -X POST http://localhost:8080/api/publish \
   -H "Content-Type: application/json" \
@@ -679,7 +679,7 @@ curl -X POST http://localhost:8080/api/publish \
   }'
 ```
 
-Verificar na BD que a estrutura foi parseada e persistida:
+Verify in the database that the structure was parsed and persisted:
 ```sql
 SELECT t.task_id, ta.attribute_name, ta.attribute_type, 
        tav.string_value, tav.numeric_value
@@ -689,111 +689,111 @@ JOIN task_attribute_values tav ON tav.attribute_id = ta.id
 WHERE t.task_id = 'TASK-001';
 ```
 
-## 🔧 Configurações Importantes
+## 🔧 Important Configurations
 
-### Perfis de Execução
+### Execution Profiles
 
-O sistema suporta três perfis através da variável `SPRING_PROFILES_ACTIVE`:
+The system supports three profiles via the `SPRING_PROFILES_ACTIVE` variable:
 
-- **`local`** (padrão): Usa Kafka e PostgreSQL externos via variáveis de ambiente (ambiente empresarial sem Docker)
-- **`docker`**: Usa Kafka e PostgreSQL locais (localhost) via docker-compose
-- **`oracle`**: Usa Oracle Database para outbox com Kafka externo via variáveis de ambiente
+- **`local`** (default): Uses external Kafka and PostgreSQL via environment variables (enterprise environment without Docker)
+- **`docker`**: Uses local Kafka and PostgreSQL (localhost) via docker-compose
+- **`oracle`**: Uses Oracle Database for outbox with external Kafka via environment variables
 
-### Variáveis de Ambiente
+### Environment Variables
 
-#### Perfil `local` (PostgreSQL empresarial)
+#### `local` Profile (Enterprise PostgreSQL)
 
 ```bash
 # PostgreSQL
 DATASOURCE_URL=jdbc:postgresql://host:port/database
-DATASOURCE_USERNAME=usuario
-DATASOURCE_PASSWORD=senha
+DATASOURCE_USERNAME=username
+DATASOURCE_PASSWORD=password
 
 # Kafka
 KAFKA_BOOTSTRAP_SERVERS=kafka-host:9092
 
-# Perfil ativo (opcional, já é o padrão)
+# Active profile (optional, already the default)
 SPRING_PROFILES_ACTIVE=local
 ```
 
-#### Perfil `docker` (Docker local)
+#### `docker` Profile (Local Docker)
 
 ```bash
-# Não requer variáveis de ambiente - usa valores hardcoded em application-docker.yml
-# Para ativar:
+# Requires no environment variables - uses hardcoded values in application-docker.yml
+# To activate:
 SPRING_PROFILES_ACTIVE=docker
 ```
 
-#### Perfil `oracle` (Oracle Database)
+#### `oracle` Profile (Oracle Database)
 
 ```bash
 # Oracle Database
 ORACLE_DATASOURCE_URL=jdbc:oracle:thin:@host:port:SID
-ORACLE_DATASOURCE_USERNAME=usuario
-ORACLE_DATASOURCE_PASSWORD=senha
+ORACLE_DATASOURCE_USERNAME=username
+ORACLE_DATASOURCE_PASSWORD=password
 
 # Kafka
 KAFKA_BOOTSTRAP_SERVERS=kafka-host:9092
 
-# Oracle AQ (opcional)
+# Oracle AQ (optional)
 ORACLE_AQ_QUEUE_NAME=OUTBOX_QUEUE
 ORACLE_AQ_QUEUE_TABLE=OUTBOX_QUEUE_TABLE
 ORACLE_AQ_POLL_INTERVAL_MS=1000
 
-# Perfil ativo
+# Active profile
 SPRING_PROFILES_ACTIVE=oracle
 ```
 
-### Como Alternar Entre Perfis
+### How to Switch Between Profiles
 
-**Opção 1: Variável de ambiente**
+**Option 1: Environment variable**
 ```bash
-export SPRING_PROFILES_ACTIVE=docker  # ou local, ou oracle
+export SPRING_PROFILES_ACTIVE=docker  # or local, or oracle
 mvn spring-boot:run
 ```
 
-**Opção 2: Argumento da linha de comando**
+**Option 2: Command line argument**
 ```bash
 mvn spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=docker"
 ```
 
-**Opção 3: Propriedade do sistema**
+**Option 3: System property**
 ```bash
 mvn spring-boot:run -Dspring.profiles.active=docker
 ```
 
-### Configurações do Consumer (application.yml)
+### Consumer Configurations (application.yml)
 
 ```yaml
 spring.kafka.consumer:
-  max-poll-records: 1                    # Processar 1 msg de cada vez
+  max-poll-records: 1                    # Process 1 msg at a time
   properties:
-    max.poll.interval.ms: 300000         # 5 min - ajuste conforme necessário
+    max.poll.interval.ms: 300000         # 5 min - adjust as needed
     session.timeout.ms: 60000
     heartbeat.interval.ms: 20000
 
 app.processing:
-  min-delay-seconds: 2                   # Delay mínimo (ajustável)
-  max-delay-seconds: 20                  # Delay máximo (ajustável)
+  min-delay-seconds: 2                   # Minimum delay (adjustable)
+  max-delay-seconds: 20                  # Maximum delay (adjustable)
 ```
 
-### Configurações do Producer (application.yml)
+### Producer Configurations (application.yml)
 
 ```yaml
 app.outbox:
-  poll-interval-ms: 1000                 # Poll a cada 1 segundo
-  batch-size: 100                        # Processar até 100 msgs por vez
-  aggregator-interval-ms: 500            # Intervalo do agregador
-  debounce-ms: 200                       # Janela de debounce para agregação
+  poll-interval-ms: 1000                 # Poll every 1 second
+  batch-size: 100                        # Process up to 100 msgs at a time
+  aggregator-interval-ms: 500            # Aggregator interval
+  debounce-ms: 200                       # Debounce window for aggregation
   
 app.kafka:
-  topic: task-topic                      # Tópico principal
-  snapshot-topic: task-snapshots         # Tópico de snapshots agregados
+  topic: task-topic                      # Main topic
+  snapshot-topic: task-snapshots         # Aggregated snapshots topic
 ```
 
-## 🐳 Deployment em Kubernetes
+## 🐳 Kubernetes Deployment
 
-Exemplo de Deployment com graceful shutdown:
+Example Deployment with graceful shutdown:
 
 ```yaml
 apiVersion: apps/v1
@@ -823,113 +823,113 @@ spec:
           periodSeconds: 10
 ```
 
-## 📚 Tecnologias Utilizadas
+## 📚 Technologies Used
 
 - **Java 17**
 - **Spring Boot 3.1.5**
-- **Spring Kafka** (não Spring Cloud Stream)
+- **Spring Kafka** (not Spring Cloud Stream)
 - **Hibernate 6.2.13** (Jakarta Persistence API)
-- **PostgreSQL 15** (para perfil local/docker)
-- **Oracle Database 12c+** (para perfil oracle - opcional)
-- **Kafka 7.5.0** (modo KRaft, sem Zookeeper)
+- **PostgreSQL 15** (for local/docker profile)
+- **Oracle Database 12c+** (for oracle profile - optional)
+- **Kafka 7.5.0** (KRaft mode, without Zookeeper)
 - **Prometheus + Grafana**
 - **Testcontainers 1.19.1**
 - **Maven**
 
 ## 🤔 Troubleshooting
 
-### Kafka não arranca no Docker
+### Kafka won't start in Docker
 ```bash
 docker-compose logs kafka
-# Verificar se a porta 9092 está livre
-# Recriar o volume se necessário: docker-compose down -v
+# Check if port 9092 is free
+# Recreate volume if necessary: docker-compose down -v
 ```
 
-### Perfil não está sendo aplicado corretamente
+### Profile is not being applied correctly
 ```bash
-# Verificar qual perfil está ativo nos logs de inicialização:
-# Procurar por: "The following profiles are active: local"
+# Check which profile is active in startup logs:
+# Look for: "The following profiles are active: local"
 
-# Forçar perfil específico:
-export SPRING_PROFILES_ACTIVE=docker  # ou local, ou oracle
+# Force specific profile:
+export SPRING_PROFILES_ACTIVE=docker  # or local, or oracle
 mvn spring-boot:run
 
-# Verificar configuração carregada:
+# Check loaded configuration:
 curl http://localhost:8080/actuator/env | jq '.propertySources'
 ```
 
-### Oracle: Erro de conexão
+### Oracle: Connection error
 ```bash
-# Verificar URL do JDBC:
-# Formato thin: jdbc:oracle:thin:@hostname:port:SID
-# Formato service: jdbc:oracle:thin:@hostname:port/service_name
+# Check JDBC URL:
+# Thin format: jdbc:oracle:thin:@hostname:port:SID
+# Service format: jdbc:oracle:thin:@hostname:port/service_name
 # TNS: jdbc:oracle:thin:@(DESCRIPTION=(...))
 
-# Testar conectividade:
-telnet seu-oracle-host 1521
+# Test connectivity:
+telnet your-oracle-host 1521
 
-# Verificar se o usuário tem permissões:
-# - SELECT, INSERT, UPDATE, DELETE em OUTBOX_MESSAGES
-# - SELECT em OUTBOX_SEQ
-# - (Opcional) EXECUTE em DBMS_AQ, DBMS_AQADM para Oracle AQ
+# Verify user has permissions:
+# - SELECT, INSERT, UPDATE, DELETE on OUTBOX_MESSAGES
+# - SELECT on OUTBOX_SEQ
+# - (Optional) EXECUTE on DBMS_AQ, DBMS_AQADM for Oracle AQ
 ```
 
-### Oracle: Tabela OUTBOX_MESSAGES não encontrada
+### Oracle: OUTBOX_MESSAGES table not found
 ```bash
-# Executar o script de setup:
-sqlplus usuario/senha@SID @producer-app/src/main/resources/oracle-outbox-setup.sql
+# Execute the setup script:
+sqlplus username/password@SID @producer-app/src/main/resources/oracle-outbox-setup.sql
 
-# Verificar se a tabela foi criada:
-sqlplus usuario/senha@SID
+# Verify table was created:
+sqlplus username/password@SID
 SQL> SELECT table_name FROM user_tables WHERE table_name = 'OUTBOX_MESSAGES';
 SQL> SELECT sequence_name FROM user_sequences WHERE sequence_name = 'OUTBOX_SEQ';
 ```
 
-### Oracle: Mensagens não estão sendo publicadas
+### Oracle: Messages are not being published
 ```bash
-# Verificar mensagens pendentes no outbox:
-sqlplus usuario/senha@SID
+# Check pending messages in outbox:
+sqlplus username/password@SID
 SQL> SELECT COUNT(*) FROM OUTBOX_MESSAGES WHERE PUBLISHED = 0;
 
-# Verificar logs do producer:
-# Procurar por: "Processing N unpublished messages from Oracle outbox"
+# Check producer logs:
+# Look for: "Processing N unpublished messages from Oracle outbox"
 
-# Verificar se o serviço Oracle está ativo:
-# Procurar por: "OracleOutboxPollingService" nos logs
-# Se não aparecer, verificar se app.outbox.use-oracle=true no perfil
+# Verify Oracle service is active:
+# Look for: "OracleOutboxPollingService" in logs
+# If it doesn't appear, check if app.outbox.use-oracle=true in profile
 ```
 
-### Rebalances frequentes
-- Aumentar `max.poll.interval.ms` se mensagens demoram muito
-- Reduzir `max-poll-records` para processar menos mensagens por vez
-- Verificar se consumers estão a fazer commit regularmente
+### Frequent rebalances
+- Increase `max.poll.interval.ms` if messages take too long
+- Reduce `max-poll-records` to process fewer messages at a time
+- Check if consumers are committing regularly
 
-### Mensagens não são consumidas
+### Messages are not consumed
 ```bash
-# Verificar offset do consumer group
+# Check consumer group offset
 docker exec -it kafka kafka-consumer-groups --bootstrap-server localhost:9092 --describe --group task-consumer-group
 
-# Verificar tópico
+# Check topic
 docker exec -it kafka kafka-topics --bootstrap-server localhost:9092 --describe --topic task-topic
 ```
 
-### Outbox messages não são publicadas
+### Outbox messages are not published
 ```sql
--- Verificar mensagens pendentes
+-- Check pending messages
 SELECT * FROM outbox_messages WHERE published = false;
 
--- Verificar logs do producer
-# Logs devem mostrar "Publishing message X to topic Y"
+-- Check producer logs
+# Logs should show "Publishing message X to topic Y"
 ```
 
-## 📄 Licença
+## 📄 License
 
 MIT License
 
-## 👥 Contribuidores
+## 👥 Contributors
 
-Desenvolvido como PoC para demonstrar:
-- Kafka moderno sem Zookeeper
-- Padrão Outbox transacional
-- Prevenção de rebalances em processamento longo
-- Monitorização completa com Prometheus/Grafana
+Developed as PoC to demonstrate:
+- Modern Kafka without Zookeeper
+- Transactional Outbox pattern
+- Rebalance prevention in long processing
+- Complete monitoring with Prometheus/Grafana
