@@ -1,282 +1,436 @@
-# Kafka Partitions PoC
+# Kafka Partitions PoC - Modern Setup without Zookeeper
 
-Este projeto contém mini-aplicações Maven para testar o funcionamento de partições Kafka usando Spring Cloud Stream e Java 17.
+Este projeto demonstra uma aplicação completa de Kafka usando Spring Kafka (sem Spring Cloud Stream), com persistência em PostgreSQL usando Hibernate 6, padrão Transactional Outbox, e monitorização com Prometheus e Grafana.
 
-## Estrutura do Projeto
+## 🎯 Características Principais
+
+- ✅ **Kafka em modo KRaft** - Sem dependência de Zookeeper
+- ✅ **Persistência completa** - PostgreSQL com Hibernate 6
+- ✅ **Padrão Outbox** - Produção transacional de mensagens
+- ✅ **Hierarquia de dados** - Task → TaskAttribute → TaskAttributeValue
+- ✅ **Processamento simulado** - Delay configurável (2-20 segundos)
+- ✅ **Prevenção de rebalances** - Configurações otimizadas para processamento longo
+- ✅ **Graceful shutdown** - Endpoint para parar consumo antes de terminar o pod
+- ✅ **Monitorização** - Prometheus + Grafana com métricas personalizadas
+- ✅ **Testes de integração** - Testcontainers com Kafka e PostgreSQL
+- ✅ **Distribuição por partições** - Mensagens distribuídas por key (cliente)
+
+## 📋 Estrutura do Projeto
 
 ```
 kafkaPartitionsPoc/
-├── consumer-app/          # Aplicação consumidora Kafka
-├── producer-app/          # Aplicação produtora Kafka com REST API
-└── pom.xml               # POM parent
+├── consumer-app/          # Aplicação consumidora com persistência
+│   ├── entity/           # Task, TaskAttribute, TaskAttributeValue, MessageRecord
+│   ├── repository/       # Spring Data JPA repositories
+│   ├── service/          # TaskConsumerService com processamento 2-20s
+│   ├── config/           # Kafka consumer config com rebalance prevention
+│   └── controller/       # Endpoint /internal/stop-consuming
+├── producer-app/          # Aplicação produtora com Outbox pattern
+│   ├── entity/           # OutboxMessage
+│   ├── repository/       # OutboxMessageRepository
+│   ├── service/          # OutboxPollingService (scheduler)
+│   ├── controller/       # REST API para adicionar mensagens ao outbox
+│   └── config/           # Kafka producer config
+├── monitoring/            # Configurações Prometheus + Grafana
+└── docker-compose.yml     # Kafka (KRaft), PostgreSQL, Prometheus, Grafana
 ```
 
-## Pré-requisitos
+## 🚀 Quick Start
 
-- Java 17
+### Pré-requisitos
+
+- Java 17+
 - Maven 3.6+
-- Kafka (executando em localhost:9092)
-- Docker (opcional, para executar Kafka)
+- Docker e Docker Compose
 
-## Executar Kafka com Docker
-
-Se não tiver Kafka instalado localmente, pode usar Docker Compose:
+### 1. Iniciar Infraestrutura
 
 ```bash
-# Criar docker-compose.yml (ver exemplo abaixo)
 docker-compose up -d
 ```
 
-Exemplo de `docker-compose.yml`:
+Isto inicia:
+- **Kafka** (porta 9092) - modo KRaft, sem Zookeeper
+- **PostgreSQL** (porta 5432) - banco de dados para ambas as aplicações
+- **Prometheus** (porta 9090) - coleta de métricas
+- **Grafana** (porta 3000) - visualização de métricas (admin/admin)
 
-```yaml
-version: '3.8'
-services:
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.5.0
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-    ports:
-      - "2181:2181"
-
-  kafka:
-    image: confluentinc/cp-kafka:7.5.0
-    depends_on:
-      - zookeeper
-    ports:
-      - "9092:9092"
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-```
-
-## Build do Projeto
-
-Compilar todos os módulos:
+### 2. Build do Projeto
 
 ```bash
-cd /caminho/para/kafkaPartitionsPoc
 mvn clean install
 ```
 
-## Executar as Aplicações
-
-### 1. Producer App (Porta 8080)
+### 3. Executar Producer
 
 ```bash
 cd producer-app
 mvn spring-boot:run
 ```
 
-Ou executar o JAR:
+O producer estará disponível em http://localhost:8080
 
-```bash
-java -jar producer-app/target/producer-app-0.0.1-SNAPSHOT.jar
-```
+### 4. Executar Consumer(s)
 
-### 2. Consumer App - Múltiplas Instâncias
-
-Para observar o rebalanceamento, execute **várias instâncias** do consumer em terminais diferentes:
-
-**Terminal 1:**
+**Terminal 1 (Consumer 1):**
 ```bash
 cd consumer-app
 mvn spring-boot:run
 ```
 
-**Terminal 2:**
+**Terminal 2 (Consumer 2 - opcional):**
 ```bash
 cd consumer-app
 mvn spring-boot:run -Dspring-boot.run.arguments="--server.port=8082"
 ```
 
-**Terminal 3:**
+**Terminal 3 (Consumer 3 - opcional):**
 ```bash
 cd consumer-app
 mvn spring-boot:run -Dspring-boot.run.arguments="--server.port=8083"
 ```
 
-Ou usando JARs:
+## 📊 Como Funciona
 
-```bash
-# Terminal 1
-java -jar consumer-app/target/consumer-app-0.0.1-SNAPSHOT.jar --server.port=8081
+### Padrão Outbox (Producer)
 
-# Terminal 2
-java -jar consumer-app/target/consumer-app-0.0.1-SNAPSHOT.jar --server.port=8082
+1. Cliente faz POST para `/api/publish` ou `/api/publish-batch`
+2. Mensagem é **inserida na tabela `outbox_messages`** (transacional)
+3. `OutboxPollingService` (agendado a cada 1s) lê mensagens não publicadas
+4. Publica no Kafka e marca como `published = true`
+5. Usa `messageKey` para distribuir por partições
 
-# Terminal 3
-java -jar consumer-app/target/consumer-app-0.0.1-SNAPSHOT.jar --server.port=8083
+### Consumer com Persistência
+
+1. Recebe mensagem do Kafka (`@KafkaListener`)
+2. Cria `MessageRecord` com `receivedAt` timestamp
+3. **Simula processamento** (delay 2-20 segundos aleatório)
+4. Tenta fazer parse como estrutura `Task` e persiste hierarquia
+5. Atualiza `MessageRecord` com `processedAt` e `processingDurationMs`
+6. **Commit manual** do offset apenas após persistência bem-sucedida
+
+### Evitar Rebalances
+
+Configuração em `consumer-app/application.yml`:
+
+```yaml
+max.poll.interval.ms: 300000      # 5 minutos - tempo máximo entre polls
+session.timeout.ms: 60000          # 1 minuto - tempo de sessão
+heartbeat.interval.ms: 20000       # 20 segundos - intervalo de heartbeat
+max.poll.records: 1                # 1 mensagem por poll (controle fino)
 ```
 
-## Testar o Particionamento
+## 🧪 Testes de Integração
 
-### Via REST API (Producer App)
+Execute os testes:
 
-O producer-app expõe endpoints REST para publicar mensagens:
+```bash
+mvn test
+```
 
-#### Publicar uma mensagem única:
+Os testes usam:
+- **Testcontainers** para PostgreSQL e Kafka
+- **@EmbeddedKafka** para testes com Kafka
+- **Awaitility** para assertions assíncronas
 
+### Testes do Consumer
+
+- Consumo de mensagem única
+- Múltiplas mensagens com keys diferentes
+- Parsing de estrutura Task hierárquica
+- Verificação de timestamps e duração
+
+### Testes do Producer
+
+- Publicação via outbox pattern
+- Distribuição por partições
+- Múltiplas mensagens com diferentes clientes
+
+## 📡 Endpoints API
+
+### Producer App (porta 8080)
+
+#### Publicar mensagem única
 ```bash
 curl -X POST http://localhost:8080/api/publish \
   -H "Content-Type: application/json" \
   -d '{
-    "message": "Olá Kafka!",
-    "partitionKey": "key-1"
+    "message": "Hello Kafka!",
+    "partitionKey": "client-1"
   }'
 ```
 
-#### Publicar um lote de mensagens:
-
+#### Publicar lote de mensagens
 ```bash
 curl -X POST http://localhost:8080/api/publish-batch \
   -H "Content-Type: application/json" \
   -d '{
     "count": 30,
-    "prefix": "Teste"
+    "prefix": "TestMessage"
   }'
 ```
 
-Este comando publica 30 mensagens distribuídas por 3 partições.
-
-### Via Kafka Console Producer
-
-Também pode usar as ferramentas do Kafka:
-
+#### Estatísticas do Outbox
 ```bash
-# Criar o tópico com 3 partições
-kafka-topics.sh --create --topic test-topic --partitions 3 --replication-factor 1 --bootstrap-server localhost:9092
-
-# Publicar mensagens
-kafka-console-producer.sh --broker-list localhost:9092 --topic test-topic
+curl http://localhost:8080/api/outbox/stats
 ```
 
-## Observar o Rebalanceamento
-
-Quando você executa múltiplas instâncias do consumer:
-
-1. **Inicialmente**, cada consumer será atribuído a diferentes partições
-2. **Logs do consumer** mostrarão as partições atribuídas:
-   ```
-   ConsumerCoordinator : (Re-)joining group
-   ConsumerCoordinator : Successfully joined group with generation X
-   ConsumerCoordinator : Assigned partitions: [test-topic-0, test-topic-1]
-   ```
-3. **Quando adicionar/remover** uma instância, verá mensagens de rebalanceamento nos logs
-4. As mensagens consumidas mostrarão a **partição e offset** de onde foram lidas
-
-### O que observar nos logs:
-
-- **Partition assignment**: Quais partições cada consumer está a processar
-- **Rebalancing**: Quando consumers entram/saem do grupo
-- **Message distribution**: Como as mensagens são distribuídas pelas partições
-
-## Configuração de Partições
-
-### Producer (producer-app/src/main/resources/application.yml)
-
-```yaml
-spring:
-  cloud:
-    stream:
-      bindings:
-        produceMessage-out-0:
-          producer:
-            partition-count: 3                              # Número de partições
-            partition-key-expression: headers['partitionKey'] # Como distribuir
+#### Health check
+```bash
+curl http://localhost:8080/api/health
+curl http://localhost:8080/actuator/health
 ```
 
-### Consumer (consumer-app/src/main/resources/application.yml)
+### Consumer App (porta 8081+)
 
-```yaml
-spring:
-  cloud:
-    stream:
-      bindings:
-        consumeMessage-in-0:
-          group: test-consumer-group    # Mesmo grupo = rebalancing
-          consumer:
-            concurrency: 3               # Threads por instância
-            partitioned: true
+#### Parar consumo (graceful shutdown)
+```bash
+curl -X POST http://localhost:8081/internal/stop-consuming
 ```
 
-## Endpoints Úteis
+#### Métricas Prometheus
+```bash
+curl http://localhost:8081/actuator/prometheus
+```
 
-### Producer App (porta 8080)
-- `POST /api/publish` - Publicar uma mensagem
-- `POST /api/publish-batch` - Publicar lote de mensagens
-- `GET /api/health` - Health check
-- `GET /actuator/health` - Actuator health
+## 📈 Monitorização
 
-### Consumer App (porta 8081, 8082, 8083...)
-- `GET /actuator/health` - Health check
-- `GET /actuator/metrics` - Métricas
+### Prometheus
 
-## Testes Recomendados
+Aceda a http://localhost:9090
+
+Queries úteis:
+```promql
+# Taxa de mensagens processadas por segundo
+rate(kafka_consumer_fetch_manager_records_consumed_total[1m])
+
+# Duração média de processamento
+avg(kafka_consumer_processing_duration_ms)
+
+# Mensagens no outbox não publicadas
+outbox_messages_unpublished_total
+```
+
+### Grafana
+
+1. Aceda a http://localhost:3000 (admin/admin)
+2. O datasource Prometheus já está configurado
+3. Crie dashboards personalizados ou importe templates
+
+Métricas expostas:
+- `outbox.messages.published` - Total de mensagens publicadas
+- `outbox.messages.failed` - Total de falhas na publicação
+- Métricas padrão do Kafka (consumer lag, throughput, etc.)
+- Métricas da aplicação (JVM, CPU, memória)
+
+## 🗄️ Estrutura da Base de Dados
+
+### Tabela: `tasks`
+```sql
+- id (bigserial)
+- task_id (varchar, unique)
+- raw_payload (text)
+- created_at (timestamptz)
+```
+
+### Tabela: `task_attributes`
+```sql
+- id (bigserial)
+- task_id (bigint FK)
+- attribute_name (varchar)
+- attribute_type (varchar) -- STRING, NUMERIC, DATE, BOOLEAN, ENTITY, TEXT
+```
+
+### Tabela: `task_attribute_values`
+```sql
+- id (bigserial)
+- attribute_id (bigint FK)
+- string_value (varchar)
+- numeric_value (numeric)
+- date_value (timestamptz)
+- boolean_value (boolean)
+- entity_ref (varchar)
+- text_value (text)
+```
+
+### Tabela: `message_records`
+```sql
+- id (bigserial)
+- raw_message (text)
+- received_at (timestamptz)
+- processed_at (timestamptz)
+- kafka_topic (varchar)
+- partition (integer)
+- offset_value (bigint)
+- message_key (varchar)
+- processing_duration_ms (bigint)
+```
+
+### Tabela: `outbox_messages`
+```sql
+- id (bigserial)
+- payload (text)
+- message_key (varchar)
+- topic (varchar)
+- published (boolean)
+- created_at (timestamptz)
+- published_at (timestamptz)
+- client_id (varchar)
+```
+
+## 🎭 Cenários de Teste
 
 ### Teste 1: Distribuição Básica
-1. Inicie 1 consumer
-2. Publique 30 mensagens: `POST /api/publish-batch` com `count: 30`
-3. Observe que o único consumer recebe de todas as 3 partições
+1. Iniciar 1 consumer
+2. Publicar 30 mensagens: `POST /api/publish-batch` com `count: 30`
+3. Observar que o consumer processa de todas as 3 partições
+4. Verificar logs para ver duração de processamento (2-20s por mensagem)
 
 ### Teste 2: Rebalanceamento
-1. Inicie 1 consumer (recebe de todas as partições)
-2. Publique mensagens
-3. Inicie um 2º consumer → observe o rebalanceamento nos logs
-4. Publique mais mensagens → observe que são distribuídas entre os 2 consumers
-5. Pare o 2º consumer → observe o rebalanceamento novamente
+1. Iniciar 1 consumer (porta 8081)
+2. Publicar mensagens
+3. Iniciar 2º consumer (porta 8082) → observar rebalance nos logs
+4. Publicar mais mensagens → distribuídas entre consumers
+5. Parar 2º consumer → observar rebalance novamente
 
-### Teste 3: Máximo de Consumers
-1. Inicie 3 consumers (igual ao número de partições)
-2. Cada consumer deve receber de 1 partição
-3. Tente iniciar um 4º consumer → ele ficará idle (sem partições atribuídas)
-
-## Troubleshooting
-
-### Kafka não está a executar
+### Teste 3: Outbox Pattern em Tempo Real
+1. Inserir mensagens diretamente na tabela outbox:
+```sql
+INSERT INTO outbox_messages (payload, message_key, topic, client_id, published, created_at)
+VALUES ('Manual message', 'client-1', 'task-topic', 'client-1', false, NOW());
 ```
-Caused by: org.apache.kafka.common.errors.TimeoutException
-```
-**Solução**: Certifique-se que Kafka está a executar em localhost:9092
+2. Observar mensagem ser publicada automaticamente (em 1s)
+3. Verificar consumer processa a mensagem
 
-### Porta já em uso
-```
-Port 8080 is already in use
-```
-**Solução**: Use `--server.port=XXXX` para especificar outra porta
-
-### Tópico não existe
-O tópico `test-topic` é criado automaticamente com `auto-create-topics: true`. Se tiver problemas, crie manualmente:
-
+### Teste 4: Processamento com Estrutura Task
 ```bash
-kafka-topics.sh --create --topic test-topic --partitions 3 --replication-factor 1 --bootstrap-server localhost:9092
+curl -X POST http://localhost:8080/api/publish \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "{\"taskId\":\"TASK-001\",\"attributes\":[{\"name\":\"priority\",\"type\":\"STRING\",\"values\":[\"HIGH\"]},{\"name\":\"amount\",\"type\":\"NUMERIC\",\"values\":[\"1500.50\"]}]}",
+    "partitionKey": "client-1"
+  }'
 ```
 
-## Tecnologias Utilizadas
+Verificar na BD que a estrutura foi parseada e persistida:
+```sql
+SELECT t.task_id, ta.attribute_name, ta.attribute_type, 
+       tav.string_value, tav.numeric_value
+FROM tasks t
+JOIN task_attributes ta ON ta.task_id = t.id
+JOIN task_attribute_values tav ON tav.attribute_id = ta.id
+WHERE t.task_id = 'TASK-001';
+```
+
+## 🔧 Configurações Importantes
+
+### Configurações do Consumer (application.yml)
+
+```yaml
+spring.kafka.consumer:
+  max-poll-records: 1                    # Processar 1 msg de cada vez
+  properties:
+    max.poll.interval.ms: 300000         # 5 min - ajuste conforme necessário
+    session.timeout.ms: 60000
+    heartbeat.interval.ms: 20000
+
+app.processing:
+  min-delay-seconds: 2                   # Delay mínimo (ajustável)
+  max-delay-seconds: 20                  # Delay máximo (ajustável)
+```
+
+### Configurações do Producer (application.yml)
+
+```yaml
+app.outbox:
+  poll-interval-ms: 1000                 # Poll a cada 1 segundo
+  batch-size: 100                        # Processar até 100 msgs por vez
+```
+
+## 🐳 Deployment em Kubernetes
+
+Exemplo de Deployment com graceful shutdown:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-consumer
+spec:
+  replicas: 3
+  template:
+    spec:
+      terminationGracePeriodSeconds: 180
+      containers:
+      - name: consumer
+        image: consumer-app:latest
+        lifecycle:
+          preStop:
+            exec:
+              command: 
+              - /bin/sh
+              - -c
+              - "curl -X POST http://localhost:8081/internal/stop-consuming || true; sleep 10"
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 10
+```
+
+## 📚 Tecnologias Utilizadas
 
 - **Java 17**
 - **Spring Boot 3.1.5**
-- **Spring Cloud 2022.0.4**
-- **Spring Cloud Stream** (functional programming model)
-- **Spring Cloud Stream Kafka Binder**
+- **Spring Kafka** (não Spring Cloud Stream)
+- **Hibernate 6.2.13** (Jakarta Persistence API)
+- **PostgreSQL 15**
+- **Kafka 7.5.0** (modo KRaft, sem Zookeeper)
+- **Prometheus + Grafana**
+- **Testcontainers 1.19.1**
 - **Maven**
 
-## Abrir no IntelliJ
+## 🤔 Troubleshooting
 
-1. Abra o IntelliJ IDEA
-2. File → Open
-3. Selecione a pasta `kafkaPartitionsPoc` (o diretório com o pom.xml parent)
-4. IntelliJ irá importar todos os módulos automaticamente
-5. Configure múltiplas Run Configurations para o consumer-app com portas diferentes
+### Kafka não arranca no Docker
+```bash
+docker-compose logs kafka
+# Verificar se a porta 9092 está livre
+# Recriar o volume se necessário: docker-compose down -v
+```
 
-## Notas Adicionais
+### Rebalances frequentes
+- Aumentar `max.poll.interval.ms` se mensagens demoram muito
+- Reduzir `max-poll-records` para processar menos mensagens por vez
+- Verificar se consumers estão a fazer commit regularmente
 
-- Todos os consumers no mesmo `group` participam no rebalanceamento
-- O número máximo de consumers úteis = número de partições
-- Mensagens com a mesma `partitionKey` vão sempre para a mesma partição
-- O rebalanceamento acontece quando consumers entram ou saem do grupo
+### Mensagens não são consumidas
+```bash
+# Verificar offset do consumer group
+docker exec -it kafka kafka-consumer-groups --bootstrap-server localhost:9092 --describe --group task-consumer-group
+
+# Verificar tópico
+docker exec -it kafka kafka-topics --bootstrap-server localhost:9092 --describe --topic task-topic
+```
+
+### Outbox messages não são publicadas
+```sql
+-- Verificar mensagens pendentes
+SELECT * FROM outbox_messages WHERE published = false;
+
+-- Verificar logs do producer
+# Logs devem mostrar "Publishing message X to topic Y"
+```
+
+## 📄 Licença
+
+MIT License
+
+## 👥 Contribuidores
+
+Desenvolvido como PoC para demonstrar:
+- Kafka moderno sem Zookeeper
+- Padrão Outbox transacional
+- Prevenção de rebalances em processamento longo
+- Monitorização completa com Prometheus/Grafana
