@@ -1,45 +1,97 @@
 spring:
   application:
     name: consumer-app
-  cloud:
-    stream:
-      kafka:
-        binder:
-          brokers: localhost:9092
-          auto-create-topics: true
-          configuration:
-            # Enable detailed consumer logging
-            session.timeout.ms: 30000
-            heartbeat.interval.ms: 10000
-      bindings:
-        consumeMessage-in-0:
-          destination: test-topic
-          group: test-consumer-group
-          consumer:
-            # Enable concurrency for partition distribution
-            concurrency: 3
-            partitioned: true
-      function:
-        definition: consumeMessage
+  
+  # Database configuration
+  datasource:
+    url: jdbc:postgresql://localhost:5432/kafkadb
+    username: kafkauser
+    password: kafkapass
+    driver-class-name: org.postgresql.Driver
+  
+  # JPA/Hibernate configuration
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        use_sql_comments: true
+        jdbc:
+          batch_size: 20
+        order_inserts: true
+        order_updates: true
+  
+  # Kafka Consumer Configuration
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: task-consumer-group
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      # Critical settings to avoid rebalances during long processing
+      max-poll-records: 1
+      properties:
+        # Maximum time between polls (5 minutes) - adjust based on max processing time
+        max.poll.interval.ms: 300000
+        # Session timeout - how long consumer can be silent before being considered dead
+        session.timeout.ms: 60000
+        # Heartbeat interval - must be less than session timeout
+        heartbeat.interval.ms: 20000
+        # Partition assignment strategy
+        partition.assignment.strategy: org.apache.kafka.clients.consumer.CooperativeStickyAssignor
+    listener:
+      ack-mode: manual_immediate
+      # Number of concurrent consumer threads per listener
+      concurrency: 3
+
+# Application-specific configuration
+app:
+  kafka:
+    topic: task-topic
+  processing:
+    # Processing delay range in seconds (2-20)
+    min-delay-seconds: 2
+    max-delay-seconds: 20
 
 server:
   port: 8081
+  shutdown: graceful
 
-# Logging configuration to see partition assignments
+# Graceful shutdown configuration
+spring.lifecycle.timeout-per-shutdown-phase: 180s
+
+# Logging configuration
 logging:
   level:
     org.apache.kafka.clients.consumer: INFO
-    org.apache.kafka.clients.consumer.internals.ConsumerCoordinator: DEBUG
-    org.springframework.cloud.stream: DEBUG
+    org.apache.kafka.clients.consumer.internals: DEBUG
+    org.springframework.kafka: DEBUG
     com.example.kafka.consumer: INFO
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} - [%thread] [%X{partition}] %-5level %logger{36} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
+# Actuator configuration for monitoring
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       show-details: always
+    prometheus:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: ${spring.application.name}
+

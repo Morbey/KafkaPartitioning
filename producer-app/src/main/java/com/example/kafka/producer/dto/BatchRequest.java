@@ -1,4 +1,4 @@
-package com.example.kafka.producer;
+package com.example.kafka.producer.dto;
 
 public class BatchRequest {
     private Integer count;
