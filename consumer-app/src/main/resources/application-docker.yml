@@ -1,0 +1,10 @@
+spring:
+  # Database configuration for Docker environment
+  datasource:
+    url: jdbc:postgresql://localhost:5432/kafkadb
+    username: kafkauser
+    password: kafkapass
+  
+  # Kafka Consumer Configuration for Docker environment
+  kafka:
+    bootstrap-servers: localhost:9092

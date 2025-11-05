@@ -10,7 +10,8 @@ import java.time.OffsetDateTime;
 @Entity
 @Table(name = "outbox_messages", indexes = {
     @Index(name = "idx_published", columnList = "published,created_at"),
-    @Index(name = "idx_message_key", columnList = "message_key")
+    @Index(name = "idx_message_key", columnList = "message_key"),
+    @Index(name = "idx_task_id_published", columnList = "task_id,published,created_at")
 })
 public class OutboxMessage {
     
@@ -38,6 +39,9 @@ public class OutboxMessage {
     
     @Column(name = "client_id")
     private String clientId;
+    
+    @Column(name = "task_id")
+    private String taskId;
     
     public OutboxMessage() {
         this.createdAt = OffsetDateTime.now();
@@ -119,5 +123,13 @@ public class OutboxMessage {
     
     public void setClientId(String clientId) {
         this.clientId = clientId;
+    }
+    
+    public String getTaskId() {
+        return taskId;
+    }
+    
+    public void setTaskId(String taskId) {
+        this.taskId = taskId;
     }
 }
