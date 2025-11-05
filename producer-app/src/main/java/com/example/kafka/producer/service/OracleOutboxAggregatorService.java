@@ -1,7 +1,7 @@
 package com.example.kafka.producer.service;
 
-import com.example.kafka.producer.entity.OutboxMessage;
-import com.example.kafka.producer.repository.OutboxMessageRepository;
+import com.example.kafka.producer.entity.OracleOutboxMessage;
+import com.example.kafka.producer.repository.OracleOutboxMessageRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -18,18 +18,17 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Service that aggregates outbox messages by task_id and publishes task snapshots.
+ * Oracle-specific service that aggregates outbox messages by task_id and publishes task snapshots.
  * This reduces the number of messages sent to Kafka by grouping attribute-level changes
  * into a single snapshot per task.
- * Only active when NOT using Oracle outbox (app.outbox.use-oracle != true).
  */
 @Service
-@ConditionalOnProperty(name = "app.outbox.use-oracle", havingValue = "false", matchIfMissing = true)
-public class OutboxAggregatorService {
+@ConditionalOnProperty(name = "app.outbox.use-oracle", havingValue = "true")
+public class OracleOutboxAggregatorService {
 
-    private static final Logger logger = LoggerFactory.getLogger(OutboxAggregatorService.class);
+    private static final Logger logger = LoggerFactory.getLogger(OracleOutboxAggregatorService.class);
 
-    private final OutboxMessageRepository outboxRepo;
+    private final OracleOutboxMessageRepository outboxRepo;
     private final KafkaTemplate<String, String> kafka;
     private final ObjectMapper mapper = new ObjectMapper();
 
@@ -42,8 +41,8 @@ public class OutboxAggregatorService {
     @Value("${app.kafka.snapshot-topic:task-snapshots}")
     private String snapshotTopic;
 
-    public OutboxAggregatorService(OutboxMessageRepository outboxRepo, 
-                                  KafkaTemplate<String, String> kafka) {
+    public OracleOutboxAggregatorService(OracleOutboxMessageRepository outboxRepo, 
+                                        KafkaTemplate<String, String> kafka) {
         this.outboxRepo = outboxRepo;
         this.kafka = kafka;
     }
@@ -61,11 +60,11 @@ public class OutboxAggregatorService {
             return;
         }
         
-        logger.debug("Found {} unpublished messages for aggregation", rows.size());
+        logger.debug("Found {} unpublished Oracle outbox messages for aggregation", rows.size());
         
         // Group by taskId
         var byTask = rows.stream()
-            .collect(Collectors.groupingBy(OutboxMessage::getTaskId));
+            .collect(Collectors.groupingBy(OracleOutboxMessage::getTaskId));
         
         for (var entry : byTask.entrySet()) {
             String taskId = entry.getKey();
@@ -85,22 +84,22 @@ public class OutboxAggregatorService {
                 
                 // Mark original rows as published
                 List<Long> ids = group.stream()
-                    .map(OutboxMessage::getId)
+                    .map(OracleOutboxMessage::getId)
                     .collect(Collectors.toList());
                 outboxRepo.markAsPublished(ids, OffsetDateTime.now());
                 
-                logger.info("Aggregated and published snapshot for task {} ({} messages)", 
+                logger.info("Aggregated and published Oracle snapshot for task {} ({} messages)", 
                     taskId, group.size());
                 
             } catch (JsonProcessingException e) {
-                logger.error("Failed to serialize snapshot for task {}: {}", taskId, e.getMessage());
+                logger.error("Failed to serialize Oracle snapshot for task {}: {}", taskId, e.getMessage());
                 // Mark group as published to avoid infinite loop
                 List<Long> ids = group.stream()
-                    .map(OutboxMessage::getId)
+                    .map(OracleOutboxMessage::getId)
                     .collect(Collectors.toList());
                 outboxRepo.markAsPublished(ids, OffsetDateTime.now());
             } catch (Exception e) {
-                logger.error("Failed to publish snapshot for task {}: {}", taskId, e.getMessage(), e);
+                logger.error("Failed to publish Oracle snapshot for task {}: {}", taskId, e.getMessage(), e);
                 // Don't mark as published - retry on next iteration
             }
         }
@@ -110,10 +109,10 @@ public class OutboxAggregatorService {
      * Merge attribute-level payloads into a single list of attributes.
      * Uses LinkedHashMap to preserve order while ensuring latest value per attribute name.
      */
-    private List<Map<String, Object>> mergeAttributes(List<OutboxMessage> msgs) {
+    private List<Map<String, Object>> mergeAttributes(List<OracleOutboxMessage> msgs) {
         Map<String, Map<String, Object>> attrs = new LinkedHashMap<>();
         
-        for (OutboxMessage m : msgs) {
+        for (OracleOutboxMessage m : msgs) {
             Map<String, Object> p = parsePayload(m.getPayload());
             String name = (String) p.get("attributeName");
             if (name != null) {
@@ -143,7 +142,7 @@ public class OutboxAggregatorService {
             Map<String, Object> map = mapper.readValue(payload, Map.class);
             return map;
         } catch (Exception e) {
-            logger.warn("Failed to parse payload: {}", e.getMessage());
+            logger.warn("Failed to parse Oracle outbox payload: {}", e.getMessage());
             return Collections.emptyMap();
         }
     }

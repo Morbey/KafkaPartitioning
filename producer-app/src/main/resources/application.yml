@@ -2,9 +2,9 @@ spring:
   application:
     name: producer-app
   
-  # Default profile - use 'docker' for local Docker setup, 'local' for enterprise environment
+  # Default profile - use 'local' for enterprise environment (no Docker), 'docker' for local Docker setup
   profiles:
-    active: ${SPRING_PROFILES_ACTIVE:docker}
+    active: ${SPRING_PROFILES_ACTIVE:local}
   
   # Database configuration
   datasource:

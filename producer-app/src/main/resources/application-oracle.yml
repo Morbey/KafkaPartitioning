@@ -1,0 +1,56 @@
+spring:
+  # Oracle Database configuration for outbox pattern
+  # REQUIRED: Set these environment variables when using the 'oracle' profile:
+  #   ORACLE_DATASOURCE_URL - JDBC URL for your Oracle database (e.g., jdbc:oracle:thin:@oracle.company.com:1521:ORCL)
+  #   ORACLE_DATASOURCE_USERNAME - Database username
+  #   ORACLE_DATASOURCE_PASSWORD - Database password
+  #   ORACLE_AQ_QUEUE_NAME - Oracle AQ queue name (default: OUTBOX_QUEUE)
+  datasource:
+    url: ${ORACLE_DATASOURCE_URL}
+    username: ${ORACLE_DATASOURCE_USERNAME}
+    password: ${ORACLE_DATASOURCE_PASSWORD}
+    driver-class-name: oracle.jdbc.OracleDriver
+  
+  # JPA/Hibernate configuration for Oracle
+  jpa:
+    database-platform: org.hibernate.dialect.Oracle12cDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        use_sql_comments: true
+
+  # Kafka Producer Configuration
+  # Uses the same Kafka configuration as 'local' profile
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+
+# Oracle AQ Configuration
+oracle:
+  aq:
+    queue-name: ${ORACLE_AQ_QUEUE_NAME:OUTBOX_QUEUE}
+    queue-table: ${ORACLE_AQ_QUEUE_TABLE:OUTBOX_QUEUE_TABLE}
+    enabled: true
+    # Poll interval for checking Oracle outbox table (milliseconds)
+    poll-interval-ms: ${ORACLE_AQ_POLL_INTERVAL_MS:1000}
+
+# Application-specific configuration
+app:
+  outbox:
+    # Use Oracle outbox instead of PostgreSQL
+    use-oracle: true
+    # Poll interval for checking new messages (milliseconds)
+    poll-interval-ms: 1000
+    # Batch size for processing outbox messages
+    batch-size: 100
+    # Aggregator configuration
+    aggregator-interval-ms: 500
+    debounce-ms: 200
+
+# Logging configuration
+logging:
+  level:
+    oracle.jdbc: INFO
+    com.example.kafka.producer.service.OracleOutboxService: DEBUG
