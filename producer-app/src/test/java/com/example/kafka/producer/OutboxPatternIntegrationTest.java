@@ -90,7 +90,10 @@ public class OutboxPatternIntegrationTest {
         
         embeddedKafkaBroker.consumeFromAnEmbeddedTopic(consumer, "task-topic");
         
-        // When - trigger polling (wait for scheduled task)
+        // When - manually trigger polling (instead of waiting for scheduled task)
+        outboxPollingService.pollAndPublish();
+        
+        // Then - verify message was marked as published
         await()
             .atMost(5, TimeUnit.SECONDS)
             .pollInterval(500, java.util.concurrent.TimeUnit.MILLISECONDS)
@@ -100,7 +103,7 @@ public class OutboxPatternIntegrationTest {
                 assertThat(updated.getPublishedAt()).isNotNull();
             });
         
-        // Then - verify message was published to Kafka
+        // Verify message was published to Kafka
         ConsumerRecords<String, String> records = KafkaTestUtils.getRecords(
             consumer,
             Duration.ofSeconds(10)
@@ -135,7 +138,10 @@ public class OutboxPatternIntegrationTest {
             outboxRepository.save(message);
         }
         
-        // When - wait for all messages to be published
+        // When - manually trigger polling
+        outboxPollingService.pollAndPublish();
+        
+        // Then - wait for all messages to be published
         await()
             .atMost(10, TimeUnit.SECONDS)
             .pollInterval(500, java.util.concurrent.TimeUnit.MILLISECONDS)
@@ -147,7 +153,7 @@ public class OutboxPatternIntegrationTest {
                 assertThat(published).isEqualTo(9);
             });
         
-        // Then - verify all messages are marked as published
+        // Verify all messages are marked as published
         List<OutboxMessage> allMessages = outboxRepository.findAll();
         assertThat(allMessages)
             .hasSize(9)
