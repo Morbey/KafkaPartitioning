@@ -49,7 +49,6 @@ public class OutboxPollingService {
     }
     
     @Scheduled(fixedDelayString = "${app.outbox.poll-interval-ms}")
-    @Transactional
     public void pollAndPublish() {
         List<OutboxMessage> unpublishedMessages = outboxRepository.findUnpublishedMessages(
             PageRequest.of(0, batchSize)
@@ -75,31 +74,38 @@ public class OutboxPollingService {
         logger.debug("Publishing message {} to topic {} with key {}", 
             outboxMessage.getId(), outboxMessage.getTopic(), outboxMessage.getMessageKey());
         
-        CompletableFuture<SendResult<String, String>> future = kafkaTemplate.send(
-            outboxMessage.getTopic(),
-            outboxMessage.getMessageKey(),
-            outboxMessage.getPayload()
-        );
-        
-        future.whenComplete((result, ex) -> {
-            if (ex == null) {
-                // Mark as published in a new transaction
-                markAsPublished(outboxMessage);
-                publishedCounter.increment();
-                logger.info("Successfully published message {} (client: {}) to partition {}", 
-                    outboxMessage.getId(), 
-                    outboxMessage.getClientId(),
-                    result.getRecordMetadata().partition());
-            } else {
-                logger.error("Failed to publish message {}: {}", outboxMessage.getId(), ex.getMessage());
-                failedCounter.increment();
-            }
-        });
+        try {
+            CompletableFuture<SendResult<String, String>> future = kafkaTemplate.send(
+                outboxMessage.getTopic(),
+                outboxMessage.getMessageKey(),
+                outboxMessage.getPayload()
+            );
+            
+            // Wait for the send to complete with timeout to prevent indefinite blocking
+            SendResult<String, String> result = future.get(30, java.util.concurrent.TimeUnit.SECONDS);
+            
+            // Mark as published in a transaction
+            markAsPublished(outboxMessage);
+            publishedCounter.increment();
+            logger.info("Successfully published message {} (client: {}) to partition {}", 
+                outboxMessage.getId(), 
+                outboxMessage.getClientId(),
+                result.getRecordMetadata().partition());
+            
+        } catch (Exception e) {
+            logger.error("Failed to publish message {}: {}", outboxMessage.getId(), e.getMessage());
+            failedCounter.increment();
+            throw new RuntimeException("Failed to publish message " + outboxMessage.getId(), e);
+        }
     }
     
     @Transactional
     public void markAsPublished(OutboxMessage outboxMessage) {
-        outboxRepository.markAsPublished(outboxMessage.getId(), OffsetDateTime.now());
+        // Reload the entity to ensure it's in the current persistence context
+        OutboxMessage managed = outboxRepository.findById(outboxMessage.getId())
+            .orElseThrow(() -> new RuntimeException("OutboxMessage not found: " + outboxMessage.getId()));
+        managed.markPublished();
+        outboxRepository.save(managed);
     }
     
     public long getUnpublishedCount() {
